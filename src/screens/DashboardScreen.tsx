@@ -27,49 +27,35 @@ interface ChartData {
   }];
 }
 
-type DailyTimeFrame = '7days' | '30days' | '12months';
+type TimeFrame = '7days' | '30days' | '12months';
 
 export function DashboardScreen() {
   const { currentTheme } = useTheme();
-  const [dailyHabits, setDailyHabits] = useState<HabitWithStats[]>([]);
-  const [weeklyHabits, setWeeklyHabits] = useState<HabitWithStats[]>([]);
-  const [monthlyHabits, setMonthlyHabits] = useState<HabitWithStats[]>([]);
+  const [habits, setHabits] = useState<HabitWithStats[]>([]);
   const [todayStats, setTodayStats] = useState<Stats>({ total: 0, completed: 0, percentage: 0 });
-  const [weeklyStats, setWeeklyStats] = useState<Stats>({ total: 0, completed: 0, percentage: 0 });
-  const [monthlyStats, setMonthlyStats] = useState<Stats>({ total: 0, completed: 0, percentage: 0 });
   
-  // Chart data - Initialize with default values to prevent empty array errors
-  const [dailyWeekChart, setDailyWeekChart] = useState<ChartData>({ 
+  // Chart data - Initialize with default values
+  const [weekChart, setWeekChart] = useState<ChartData>({ 
     labels: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], 
     datasets: [{ data: [0, 0, 0, 0, 0, 0, 0, 1] }] 
   });
-  const [dailyMonthChart, setDailyMonthChart] = useState<ChartData>({ 
+  const [monthChart, setMonthChart] = useState<ChartData>({ 
     labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'], 
     datasets: [{ data: [0, 0, 0, 0, 1] }] 
   });
-  const [dailyYearChart, setDailyYearChart] = useState<ChartData>({ 
-    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], 
-    datasets: [{ data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1] }] 
-  });
-  const [weeklyMonthChart, setWeeklyMonthChart] = useState<ChartData>({ 
-    labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'], 
-    datasets: [{ data: [0, 0, 0, 0, 1] }] 
-  });
-  const [monthlyYearChart, setMonthlyYearChart] = useState<ChartData>({ 
+  const [yearChart, setYearChart] = useState<ChartData>({ 
     labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], 
     datasets: [{ data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1] }] 
   });
   
-  // Tab selection
-  const [dailyTimeFrame, setDailyTimeFrame] = useState<DailyTimeFrame>('7days');
-  
+  const [timeFrame, setTimeFrame] = useState<TimeFrame>('7days');
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const loadAnalytics = async () => {
     try {
       setLoading(true);
-      const habits = await db.getHabits();
+      const allHabits = await db.getHabits();
       const logs = await db.getTodayLogs();
 
       const logsMap: Record<number, number> = {};
@@ -78,7 +64,7 @@ export function DashboardScreen() {
       });
 
       const habitsWithStats = await Promise.all(
-        habits.map(async (habit) => {
+        allHabits.map(async (habit) => {
           const stats = await db.getHabitStats(habit.id);
           return {
             ...habit,
@@ -89,27 +75,16 @@ export function DashboardScreen() {
         })
       );
 
-      const daily = habitsWithStats.filter(h => h.frequency === 'daily');
-      const weekly = habitsWithStats.filter(h => h.frequency === 'weekly');
-      const monthly = habitsWithStats.filter(h => h.frequency === 'monthly');
+      setHabits(habitsWithStats);
 
-      setDailyHabits(daily);
-      setWeeklyHabits(weekly);
-      setMonthlyHabits(monthly);
-
-      const calcStats = (habits: HabitWithStats[]) => {
-        const total = habits.length;
-        const completed = habits.filter(h => h.completedToday).length;
-        const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
-        return { total, completed, percentage };
-      };
-
-      setTodayStats(calcStats(daily));
-      setWeeklyStats(calcStats(weekly));
-      setMonthlyStats(calcStats(monthly));
+      const total = habitsWithStats.length;
+      const completed = habitsWithStats.filter(h => h.completedToday).length;
+      const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+      
+      setTodayStats({ total, completed, percentage });
 
       // Load chart data
-      await loadChartData(daily, weekly, monthly);
+      await loadChartData(habitsWithStats);
     } catch (error) {
       console.error('Error loading analytics:', error);
     } finally {
@@ -117,255 +92,104 @@ export function DashboardScreen() {
     }
   };
 
-  const loadChartData = async (
-    dailyHabits: HabitWithStats[], 
-    weeklyHabits: HabitWithStats[], 
-    monthlyHabits: HabitWithStats[]
-  ) => {
-    console.log('=== LOADING CHART DATA ===');
-    console.log('Daily habits count:', dailyHabits.length);
-    console.log('Weekly habits count:', weeklyHabits.length);
-    console.log('Monthly habits count:', monthlyHabits.length);
-    
+  const loadChartData = async (habits: HabitWithStats[]) => {
     const today = new Date();
 
-    // Daily habits - Last 7 days (Sun to Sat)
-    if (dailyHabits.length > 0) {
-      console.log('--- Processing Daily 7 Days Chart ---');
-      const last7Days = [];
-      const last7DaysLabels = [];
-      
-      // Get current day of week (0 = Sunday, 6 = Saturday)
-      const currentDayOfWeek = today.getDay();
-      
-      // Start from last Sunday
-      const lastSunday = new Date(today);
-      lastSunday.setDate(today.getDate() - currentDayOfWeek);
-      
-      for (let i = 0; i < 7; i++) {
-        const date = new Date(lastSunday);
-        date.setDate(lastSunday.getDate() + i);
-        const dateStr = date.toISOString().split('T')[0];
-        
-        let completed = 0;
-        for (const habit of dailyHabits) {
-          const logs = await db.getHabitLogs(habit.id, dateStr, dateStr);
-          if (logs.length > 0 && logs[0].completed) {
-            completed++;
-          }
-        }
-        
-        last7Days.push(completed);
-        last7DaysLabels.push(['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][i]);
-      }
-
-      // Add max value for proper Y-axis scaling
-      const maxHabits = dailyHabits.length;
-      const dataWithMax = [...last7Days, maxHabits];
-      
-      console.log('Daily 7 Days - Labels:', last7DaysLabels);
-      console.log('Daily 7 Days - Data:', last7Days);
-      console.log('Daily 7 Days - Max Habits:', maxHabits);
-      console.log('Daily 7 Days - Data with Max:', dataWithMax);
-      console.log('Daily 7 Days - Has undefined?', dataWithMax.some(val => val === undefined || val === null));
-
-      setDailyWeekChart({
-        labels: last7DaysLabels,
-        datasets: [{ data: dataWithMax }]
-      });
-    } else {
-      console.log('No daily habits - setting default chart');
-      setDailyWeekChart({
+    if (habits.length === 0) {
+      setWeekChart({
         labels: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
         datasets: [{ data: [0, 0, 0, 0, 0, 0, 0, 0] }]
       });
-    }
-
-    // Daily habits - Last 30 days (grouped by week)
-    if (dailyHabits.length > 0) {
-      console.log('--- Processing Daily 30 Days Chart ---');
-      const weeks = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
-      const weeklyData = [0, 0, 0, 0];
-      
-      for (let i = 0; i < 30; i++) {
-        const date = new Date(today);
-        date.setDate(date.getDate() - i);
-        const dateStr = date.toISOString().split('T')[0];
-        const weekIndex = Math.floor(i / 7);
-        
-        if (weekIndex < 4) {
-          for (const habit of dailyHabits) {
-            const logs = await db.getHabitLogs(habit.id, dateStr, dateStr);
-            if (logs.length > 0 && logs[0].completed) {
-              weeklyData[3 - weekIndex]++;
-            }
-          }
-        }
-      }
-
-      // Add max value
-      const maxHabits = dailyHabits.length;
-      const dataWithMax = [...weeklyData, maxHabits];
-      
-      console.log('Daily 30 Days - Labels:', weeks);
-      console.log('Daily 30 Days - Data:', weeklyData);
-      console.log('Daily 30 Days - Max Habits:', maxHabits);
-      console.log('Daily 30 Days - Data with Max:', dataWithMax);
-      console.log('Daily 30 Days - Has undefined?', dataWithMax.some(val => val === undefined || val === null));
-
-      setDailyMonthChart({
-        labels: weeks,
-        datasets: [{ data: dataWithMax }]
-      });
-    } else {
-      console.log('No daily habits - setting default 30 day chart');
-      setDailyMonthChart({
+      setMonthChart({
         labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
         datasets: [{ data: [0, 0, 0, 0, 0] }]
       });
-    }
-
-    // Daily habits - Last 12 months
-    if (dailyHabits.length > 0) {
-      console.log('--- Processing Daily 12 Months Chart ---');
-      const months = [];
-      const monthlyData = [];
-      
-      for (let i = 11; i >= 0; i--) {
-        const date = new Date(today);
-        date.setMonth(date.getMonth() - i);
-        months.push(date.toLocaleDateString('en-US', { month: 'short' }));
-        
-        const startDate = new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0];
-        const endDate = new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0];
-        
-        let completed = 0;
-        for (const habit of dailyHabits) {
-          const logs = await db.getHabitLogs(habit.id, startDate, endDate);
-          completed += logs.filter(l => l.completed).length;
-        }
-        
-        monthlyData.push(completed);
-      }
-
-      // Add max value
-      const maxHabits = dailyHabits.length;
-      const dataWithMax = [...monthlyData, maxHabits];
-      
-      console.log('Daily 12 Months - Labels:', months);
-      console.log('Daily 12 Months - Data:', monthlyData);
-      console.log('Daily 12 Months - Max Habits:', maxHabits);
-      console.log('Daily 12 Months - Data with Max:', dataWithMax);
-      console.log('Daily 12 Months - Has undefined?', dataWithMax.some(val => val === undefined || val === null));
-
-      setDailyYearChart({
-        labels: months,
-        datasets: [{ data: dataWithMax }]
-      });
-    } else {
-      console.log('No daily habits - setting default 12 month chart');
-      setDailyYearChart({
+      setYearChart({
         labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
         datasets: [{ data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }]
       });
+      return;
     }
 
-    // Weekly habits - Last 4 weeks
-    if (weeklyHabits.length > 0) {
-      console.log('--- Processing Weekly Chart ---');
-      const weeks = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
-      const weeklyData = [];
-      
-      for (let i = 3; i >= 0; i--) {
-        const startDate = new Date(today);
-        startDate.setDate(startDate.getDate() - (i * 7 + 7));
-        const endDate = new Date(today);
-        endDate.setDate(endDate.getDate() - (i * 7));
-        
-        const startStr = startDate.toISOString().split('T')[0];
-        const endStr = endDate.toISOString().split('T')[0];
-        
-        let completed = 0;
-        for (const habit of weeklyHabits) {
-          const logs = await db.getHabitLogs(habit.id, startStr, endStr);
-          if (logs.length > 0 && logs.some(l => l.completed)) {
-            completed++;
-          }
-        }
-        
-        weeklyData.push(completed);
-      }
-
-      // Add max value
-      const maxHabits = weeklyHabits.length;
-      const dataWithMax = [...weeklyData, maxHabits];
-      
-      console.log('Weekly - Labels:', weeks);
-      console.log('Weekly - Data:', weeklyData);
-      console.log('Weekly - Max Habits:', maxHabits);
-      console.log('Weekly - Data with Max:', dataWithMax);
-      console.log('Weekly - Has undefined?', dataWithMax.some(val => val === undefined || val === null));
-
-      setWeeklyMonthChart({
-        labels: weeks,
-        datasets: [{ data: dataWithMax }]
-      });
-    } else {
-      console.log('No weekly habits - setting default chart');
-      setWeeklyMonthChart({
-        labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
-        datasets: [{ data: [0, 0, 0, 0, 0] }]
-      });
-    }
-
-    // Monthly habits - Last 12 months
-    if (monthlyHabits.length > 0) {
-      console.log('--- Processing Monthly Chart ---');
-      const months = [];
-      const monthlyData = [];
-      
-      for (let i = 11; i >= 0; i--) {
-        const date = new Date(today);
-        date.setMonth(date.getMonth() - i);
-        months.push(date.toLocaleDateString('en-US', { month: 'short' }));
-        
-        const startDate = new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0];
-        const endDate = new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0];
-        
-        let completed = 0;
-        for (const habit of monthlyHabits) {
-          const logs = await db.getHabitLogs(habit.id, startDate, endDate);
-          if (logs.length > 0 && logs.some(l => l.completed)) {
-            completed++;
-          }
-        }
-        
-        monthlyData.push(completed);
-      }
-
-      // Add max value
-      const maxHabits = monthlyHabits.length;
-      const dataWithMax = [...monthlyData, maxHabits];
-      
-      console.log('Monthly - Labels:', months);
-      console.log('Monthly - Data:', monthlyData);
-      console.log('Monthly - Max Habits:', maxHabits);
-      console.log('Monthly - Data with Max:', dataWithMax);
-      console.log('Monthly - Has undefined?', dataWithMax.some(val => val === undefined || val === null));
-
-      setMonthlyYearChart({
-        labels: months,
-        datasets: [{ data: dataWithMax }]
-      });
-    } else {
-      console.log('No monthly habits - setting default chart');
-      setMonthlyYearChart({
-        labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-        datasets: [{ data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }]
-      });
-    }
+    // Last 7 days (Sun to Sat)
+    const last7Days = [];
+    const last7DaysLabels = [];
+    const currentDayOfWeek = today.getDay();
+    const lastSunday = new Date(today);
+    lastSunday.setDate(today.getDate() - currentDayOfWeek);
     
-    console.log('=== CHART DATA LOADING COMPLETE ===');
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(lastSunday);
+      date.setDate(lastSunday.getDate() + i);
+      const dateStr = date.toISOString().split('T')[0];
+      
+      let completed = 0;
+      for (const habit of habits) {
+        const logs = await db.getHabitLogs(habit.id, dateStr, dateStr);
+        if (logs.length > 0 && logs[0].completed) {
+          completed++;
+        }
+      }
+      
+      last7Days.push(completed);
+      last7DaysLabels.push(['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][i]);
+    }
+
+    setWeekChart({
+      labels: last7DaysLabels,
+      datasets: [{ data: [...last7Days, habits.length] }]
+    });
+
+    // Last 30 days (grouped by week)
+    const weeks = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
+    const weeklyData = [0, 0, 0, 0];
+    
+    for (let i = 0; i < 30; i++) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i);
+      const dateStr = date.toISOString().split('T')[0];
+      const weekIndex = Math.floor(i / 7);
+      
+      if (weekIndex < 4) {
+        for (const habit of habits) {
+          const logs = await db.getHabitLogs(habit.id, dateStr, dateStr);
+          if (logs.length > 0 && logs[0].completed) {
+            weeklyData[3 - weekIndex]++;
+          }
+        }
+      }
+    }
+
+    setMonthChart({
+      labels: weeks,
+      datasets: [{ data: [...weeklyData, habits.length] }]
+    });
+
+    // Last 12 months
+    const months = [];
+    const monthlyData = [];
+    
+    for (let i = 11; i >= 0; i--) {
+      const date = new Date(today);
+      date.setMonth(date.getMonth() - i);
+      months.push(date.toLocaleDateString('en-US', { month: 'short' }));
+      
+      const startDate = new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0];
+      const endDate = new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0];
+      
+      let completed = 0;
+      for (const habit of habits) {
+        const logs = await db.getHabitLogs(habit.id, startDate, endDate);
+        completed += logs.filter(l => l.completed).length;
+      }
+      
+      monthlyData.push(completed);
+    }
+
+    setYearChart({
+      labels: months,
+      datasets: [{ data: [...monthlyData, habits.length] }]
+    });
   };
 
   useFocusEffect(
@@ -395,28 +219,19 @@ export function DashboardScreen() {
     },
   };
 
-  const renderDailyChart = () => {
-    console.log('=== RENDERING DAILY CHART ===');
-    console.log('Daily time frame:', dailyTimeFrame);
-    
-    let chartData = dailyWeekChart;
+  const renderChart = () => {
+    let chartData = weekChart;
     let title = 'Last 7 Days (Sun - Sat)';
     
-    if (dailyTimeFrame === '30days') {
-      chartData = dailyMonthChart;
+    if (timeFrame === '30days') {
+      chartData = monthChart;
       title = 'Last 30 Days (by week)';
-    } else if (dailyTimeFrame === '12months') {
-      chartData = dailyYearChart;
+    } else if (timeFrame === '12months') {
+      chartData = yearChart;
       title = 'Last 12 Months';
     }
-    
-    console.log('Chart data labels:', chartData.labels);
-    console.log('Chart data values:', chartData.datasets[0].data);
-    console.log('Has undefined in data?', chartData.datasets[0].data.some(val => val === undefined || val === null));
 
-    // Don't render if data is empty
     if (chartData.labels.length === 0 || chartData.datasets[0].data.length === 0) {
-      console.log('Chart data is empty, showing loading...');
       return (
         <View style={styles.chartContainer}>
           <Text style={[styles.chartTitle, { color: currentTheme.textPrimary }]}>
@@ -444,7 +259,7 @@ export function DashboardScreen() {
           yAxisSuffix=""
           fromZero
           showValuesOnTopOfBars
-          segments={dailyHabits.length > 0 ? dailyHabits.length : 1}
+          segments={habits.length > 0 ? habits.length : 1}
         />
       </View>
     );
@@ -479,7 +294,7 @@ export function DashboardScreen() {
           <View style={styles.summaryStats}>
             <View style={styles.summaryItem}>
               <Text style={[styles.summaryNumber, { color: currentTheme.accent }]}>
-                {todayStats.completed + weeklyStats.completed + monthlyStats.completed}
+                {todayStats.completed}
               </Text>
               <Text style={[styles.summaryLabel, { color: currentTheme.textSecondary }]}>
                 Completed
@@ -487,7 +302,7 @@ export function DashboardScreen() {
             </View>
             <View style={styles.summaryItem}>
               <Text style={[styles.summaryNumber, { color: currentTheme.accent }]}>
-                {todayStats.total + weeklyStats.total + monthlyStats.total}
+                {todayStats.total}
               </Text>
               <Text style={[styles.summaryLabel, { color: currentTheme.textSecondary }]}>
                 Total Habits
@@ -495,7 +310,7 @@ export function DashboardScreen() {
             </View>
             <View style={styles.summaryItem}>
               <Text style={[styles.summaryNumber, { color: currentTheme.accent }]}>
-                {Math.max(...[...dailyHabits, ...weeklyHabits, ...monthlyHabits].map(h => h.streak), 0)}
+                {Math.max(...habits.map(h => h.streak), 0)}
               </Text>
               <Text style={[styles.summaryLabel, { color: currentTheme.textSecondary }]}>
                 Best Streak
@@ -504,14 +319,14 @@ export function DashboardScreen() {
           </View>
         </View>
 
-        {/* Daily Habits Section */}
-        {dailyHabits.length > 0 && (
+        {/* Habits Progress Section */}
+        {habits.length > 0 && (
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: currentTheme.textPrimary }]}>
-              Daily Habits Progress
+              Habits Progress
             </Text>
             <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>
-              Total Daily Habits: {dailyHabits.length}
+              Total Habits: {habits.length}
             </Text>
 
             {/* Tabs */}
@@ -520,15 +335,15 @@ export function DashboardScreen() {
                 style={[
                   styles.tab,
                   { backgroundColor: currentTheme.cardBackground },
-                  dailyTimeFrame === '7days' && { backgroundColor: currentTheme.accent },
+                  timeFrame === '7days' && { backgroundColor: currentTheme.accent },
                 ]}
-                onPress={() => setDailyTimeFrame('7days')}
+                onPress={() => setTimeFrame('7days')}
               >
                 <Text
                   style={[
                     styles.tabText,
                     { color: currentTheme.textSecondary },
-                    dailyTimeFrame === '7days' && { color: '#FFFFFF', fontWeight: 'bold' },
+                    timeFrame === '7days' && { color: '#FFFFFF', fontWeight: 'bold' },
                   ]}
                 >
                   7 Days
@@ -538,15 +353,15 @@ export function DashboardScreen() {
                 style={[
                   styles.tab,
                   { backgroundColor: currentTheme.cardBackground },
-                  dailyTimeFrame === '30days' && { backgroundColor: currentTheme.accent },
+                  timeFrame === '30days' && { backgroundColor: currentTheme.accent },
                 ]}
-                onPress={() => setDailyTimeFrame('30days')}
+                onPress={() => setTimeFrame('30days')}
               >
                 <Text
                   style={[
                     styles.tabText,
                     { color: currentTheme.textSecondary },
-                    dailyTimeFrame === '30days' && { color: '#FFFFFF', fontWeight: 'bold' },
+                    timeFrame === '30days' && { color: '#FFFFFF', fontWeight: 'bold' },
                   ]}
                 >
                   30 Days
@@ -556,15 +371,15 @@ export function DashboardScreen() {
                 style={[
                   styles.tab,
                   { backgroundColor: currentTheme.cardBackground },
-                  dailyTimeFrame === '12months' && { backgroundColor: currentTheme.accent },
+                  timeFrame === '12months' && { backgroundColor: currentTheme.accent },
                 ]}
-                onPress={() => setDailyTimeFrame('12months')}
+                onPress={() => setTimeFrame('12months')}
               >
                 <Text
                   style={[
                     styles.tabText,
                     { color: currentTheme.textSecondary },
-                    dailyTimeFrame === '12months' && { color: '#FFFFFF', fontWeight: 'bold' },
+                    timeFrame === '12months' && { color: '#FFFFFF', fontWeight: 'bold' },
                   ]}
                 >
                   12 Months
@@ -572,71 +387,11 @@ export function DashboardScreen() {
               </TouchableOpacity>
             </View>
 
-            {renderDailyChart()}
+            {renderChart()}
           </View>
         )}
 
-        {/* Weekly Habits Section */}
-        {weeklyHabits.length > 0 && (
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: currentTheme.textPrimary }]}>
-              Weekly Habits Progress
-            </Text>
-            <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>
-              Total Weekly Habits: {weeklyHabits.length}
-            </Text>
-
-            <View style={styles.chartContainer}>
-              <Text style={[styles.chartTitle, { color: currentTheme.textPrimary }]}>
-                Last 4 Weeks
-              </Text>
-              <BarChart
-                data={weeklyMonthChart}
-                width={screenWidth - 48}
-                height={220}
-                chartConfig={chartConfig}
-                style={styles.chart}
-                yAxisLabel=""
-                yAxisSuffix=""
-                fromZero
-                showValuesOnTopOfBars
-                segments={weeklyHabits.length > 0 ? weeklyHabits.length : 1}
-              />
-            </View>
-          </View>
-        )}
-
-        {/* Monthly Habits Section */}
-        {monthlyHabits.length > 0 && (
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: currentTheme.textPrimary }]}>
-              Monthly Habits Progress
-            </Text>
-            <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>
-              Total Monthly Habits: {monthlyHabits.length}
-            </Text>
-
-            <View style={styles.chartContainer}>
-              <Text style={[styles.chartTitle, { color: currentTheme.textPrimary }]}>
-                Last 12 Months
-              </Text>
-              <BarChart
-                data={monthlyYearChart}
-                width={screenWidth - 48}
-                height={220}
-                chartConfig={chartConfig}
-                style={styles.chart}
-                yAxisLabel=""
-                yAxisSuffix=""
-                fromZero
-                showValuesOnTopOfBars
-                segments={monthlyHabits.length > 0 ? monthlyHabits.length : 1}
-              />
-            </View>
-          </View>
-        )}
-
-        {dailyHabits.length === 0 && weeklyHabits.length === 0 && monthlyHabits.length === 0 && (
+        {habits.length === 0 && (
           <View style={[styles.emptyState, { backgroundColor: currentTheme.cardBackground }]}>
             <Text style={[styles.emptyText, { color: currentTheme.textSecondary }]}>
               No habits to track yet.{'\n'}Add some habits in Settings to get started!

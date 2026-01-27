@@ -13,12 +13,11 @@ export function HabitTrackerScreen() {
   const { currentTheme } = useTheme();
   const [habits, setHabits] = useState<HabitWithCompletion[]>([]);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<'daily' | 'weekly' | 'monthly'>('daily');
 
   useFocusEffect(
     React.useCallback(() => {
       loadHabits();
-    }, [view])
+    }, [])
   );
 
   const loadHabits = async () => {
@@ -32,15 +31,12 @@ export function HabitTrackerScreen() {
         logsMap[log.habitId] = log.completed;
       });
 
-      // Filter habits based on current view
-      const filteredHabits = allHabits
-        .filter(habit => habit.frequency === view)
-        .map(habit => ({
-          ...habit,
-          completedToday: logsMap[habit.id] === 1,
-        }));
+      const habitsWithCompletion = allHabits.map(habit => ({
+        ...habit,
+        completedToday: logsMap[habit.id] === 1,
+      }));
 
-      setHabits(filteredHabits);
+      setHabits(habitsWithCompletion);
     } catch (error) {
       console.error('Error loading habits:', error);
     } finally {
@@ -70,43 +66,18 @@ export function HabitTrackerScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: currentTheme.colors[0] }]}>
       <View style={styles.header}>
         <Text style={[styles.title, { color: currentTheme.textPrimary }]}>
-          My Habits
+          Today's Habits
         </Text>
         <Text style={[styles.subtitle, { color: currentTheme.textSecondary }]}>
-          Track your spiritual journey
+          Track your daily spiritual journey
         </Text>
-      </View>
-
-      {/* View Selector */}
-      <View style={styles.viewSelector}>
-        {['daily', 'weekly', 'monthly'].map((v) => (
-          <TouchableOpacity
-            key={v}
-            style={[
-              styles.viewButton,
-              { backgroundColor: currentTheme.cardBackground },
-              view === v && { backgroundColor: currentTheme.accent },
-            ]}
-            onPress={() => setView(v as 'daily' | 'weekly' | 'monthly')}
-          >
-            <Text
-              style={[
-                styles.viewButtonText,
-                { color: currentTheme.textSecondary },
-                view === v && { color: '#FFFFFF', fontWeight: 'bold' },
-              ]}
-            >
-              {v.charAt(0).toUpperCase() + v.slice(1)}
-            </Text>
-          </TouchableOpacity>
-        ))}
       </View>
 
       {/* Habits List */}
       {habits.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={[styles.emptyText, { color: currentTheme.textSecondary }]}>
-            No {view} habits yet.{'\n'}Add some in Settings!
+            No habits yet.{'\n'}Add some in Settings!
           </Text>
         </View>
       ) : (
@@ -149,7 +120,7 @@ export function HabitTrackerScreen() {
                     {item.name}
                   </Text>
                   <Text style={[styles.habitFrequency, { color: currentTheme.textSecondary }]}>
-                    {item.frequency.charAt(0).toUpperCase() + item.frequency.slice(1)}
+                    Daily
                   </Text>
                 </View>
               </View>
@@ -181,22 +152,6 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 16,
-  },
-  viewSelector: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    gap: 8,
-    marginBottom: 20,
-  },
-  viewButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  viewButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
   },
   listContent: {
     paddingHorizontal: 20,

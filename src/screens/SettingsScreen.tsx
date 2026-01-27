@@ -10,7 +10,6 @@ export function SettingsScreen() {
   const [habits, setHabits] = useState<Habit[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [habitName, setHabitName] = useState('');
-  const [selectedFrequency, setSelectedFrequency] = useState('daily');
 
   // Collapsible state
   const [themeExpanded, setThemeExpanded] = useState(false);
@@ -36,20 +35,15 @@ export function SettingsScreen() {
     }
 
     try {
-      // Auto-assign icon based on frequency
-      const autoIcon = selectedFrequency === 'daily' ? '📖' : 
-                       selectedFrequency === 'weekly' ? '🙏' : '✨';
-      
       await db.addHabit({
         name: habitName,
-        icon: autoIcon,
+        icon: '📖',
         color: currentTheme.accent,
-        frequency: selectedFrequency,
+        frequency: 'daily', // Always daily now
       });
 
       setModalVisible(false);
       setHabitName('');
-      setSelectedFrequency('daily');
       loadHabits();
     } catch (error) {
       console.error('Error adding habit:', error);
@@ -168,7 +162,7 @@ export function SettingsScreen() {
             <View style={styles.sectionContent}>
               <View style={styles.sectionHeaderActions}>
                 <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>
-                  Manage your spiritual habits
+                  Manage your daily spiritual habits
                 </Text>
                 <TouchableOpacity
                   style={[styles.addButton, { backgroundColor: currentTheme.accent }]}
@@ -196,7 +190,7 @@ export function SettingsScreen() {
                         {habit.name}
                       </Text>
                       <Text style={[styles.habitFrequency, { color: currentTheme.textSecondary }]}>
-                        {habit.frequency.charAt(0).toUpperCase() + habit.frequency.slice(1)}
+                        Daily
                       </Text>
                     </View>
                     <TouchableOpacity onPress={() => handleDeleteHabit(habit.id, habit.name)}>
@@ -215,7 +209,7 @@ export function SettingsScreen() {
         <View style={styles.modalContainer}>
           <View style={[styles.modalContent, { backgroundColor: currentTheme.colors[1] }]}>
             <Text style={[styles.modalTitle, { color: currentTheme.textPrimary }]}>
-              New Habit
+              New Daily Habit
             </Text>
 
             <TextInput
@@ -229,40 +223,12 @@ export function SettingsScreen() {
               onChangeText={setHabitName}
             />
 
-            <Text style={[styles.label, { color: currentTheme.textPrimary }]}>
-              Frequency:
-            </Text>
-            <View style={styles.frequencyButtons}>
-              {['daily', 'weekly', 'monthly'].map((freq) => (
-                <TouchableOpacity
-                  key={freq}
-                  style={[
-                    styles.frequencyButton,
-                    { backgroundColor: currentTheme.cardBackground },
-                    selectedFrequency === freq && { backgroundColor: currentTheme.accent },
-                  ]}
-                  onPress={() => setSelectedFrequency(freq)}
-                >
-                  <Text
-                    style={[
-                      styles.frequencyButtonText,
-                      { color: currentTheme.textSecondary },
-                      selectedFrequency === freq && { color: '#FFFFFF', fontWeight: 'bold' },
-                    ]}
-                  >
-                    {freq.charAt(0).toUpperCase() + freq.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={[styles.cancelButton, { backgroundColor: currentTheme.cardBackground }]}
                 onPress={() => {
                   setModalVisible(false);
                   setHabitName('');
-                  setSelectedFrequency('daily');
                 }}
               >
                 <Text style={[styles.cancelButtonText, { color: currentTheme.textPrimary }]}>
@@ -441,26 +407,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 16,
-    marginBottom: 8,
-    fontWeight: '600',
-  },
-  frequencyButtons: {
-    flexDirection: 'row',
-    gap: 8,
     marginBottom: 20,
-  },
-  frequencyButton: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  frequencyButtonText: {
-    fontWeight: '600',
   },
   modalActions: {
     flexDirection: 'row',
