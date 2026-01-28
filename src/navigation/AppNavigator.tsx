@@ -1,11 +1,12 @@
 import React from 'react';
+import { Text } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { HabitTrackerScreen } from '../screens/HabitTrackerScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
 import { JournalScreen } from '../screens/JournalScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
-import { DebugScreen } from '../screens/DebugScreen'; // Add this
+import { DebugScreen } from '../screens/DebugScreen';
 
 const Tab = createBottomTabNavigator();
 
@@ -18,9 +19,16 @@ export function AppNavigator() {
           tabBarStyle: {
             backgroundColor: '#1E3A5F',
             borderTopColor: '#3D5A7F',
+            paddingBottom: 5,
+            paddingTop: 5,
+            height: 60,
           },
           tabBarActiveTintColor: '#60A5FA',
           tabBarInactiveTintColor: '#94A3B8',
+          tabBarLabelStyle: {
+            fontSize: 12,
+            fontWeight: '600',
+          },
         }}
       >
         <Tab.Screen 
@@ -28,6 +36,9 @@ export function AppNavigator() {
           component={HabitTrackerScreen}
           options={{
             tabBarLabel: 'Habits',
+            tabBarIcon: ({ color, size }) => (
+              <Text style={{ fontSize: size, color }}>✅</Text>
+            ),
           }}
         />
         <Tab.Screen 
@@ -35,6 +46,9 @@ export function AppNavigator() {
           component={DashboardScreen}
           options={{
             tabBarLabel: 'Dashboard',
+            tabBarIcon: ({ color, size }) => (
+              <Text style={{ fontSize: size, color }}>📊</Text>
+            ),
           }}
         />
         <Tab.Screen 
@@ -42,6 +56,9 @@ export function AppNavigator() {
           component={JournalScreen}
           options={{
             tabBarLabel: 'Journal',
+            tabBarIcon: ({ color, size }) => (
+              <Text style={{ fontSize: size, color }}>📖</Text>
+            ),
           }}
         />
         <Tab.Screen 
@@ -49,6 +66,9 @@ export function AppNavigator() {
           component={SettingsScreen}
           options={{
             tabBarLabel: 'Settings',
+            tabBarIcon: ({ color, size }) => (
+              <Text style={{ fontSize: size, color }}>⚙️</Text>
+            ),
           }}
         />
         <Tab.Screen 
@@ -56,6 +76,9 @@ export function AppNavigator() {
           component={DebugScreen}
           options={{
             tabBarLabel: 'Debug',
+            tabBarIcon: ({ color, size }) => (
+              <Text style={{ fontSize: size, color }}>🔍</Text>
+            ),
           }}
         />
       </Tab.Navigator>
