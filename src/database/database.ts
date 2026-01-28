@@ -160,9 +160,15 @@ class Database {
     return result as HabitLog[];
   }
 
-  async getAllLogs() {
+  async getAllLogs(): Promise<HabitLog[]> {
   const database = this.getDatabase();
-  return await database.getAllAsync('SELECT * FROM habit_logs ORDER BY date DESC');
+  const result = await database.getAllAsync('SELECT * FROM habit_logs ORDER BY date DESC');
+  return result as HabitLog[];
+  }
+
+  async deleteHabitLog(id: number): Promise<void> {
+  const database = this.getDatabase();
+  await database.runAsync('DELETE FROM habit_logs WHERE id = ?', [id]);
   }
 
   async getHabitStats(habitId: number): Promise<HabitStats> {

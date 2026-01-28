@@ -1,12 +1,9 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, Dimensions, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { BarChart } from 'react-native-chart-kit';
-import { db, Habit } from '../database/database';
+import { db, Habit, HabitLog } from '../database/database';
 import { useTheme } from '../context/ThemeContext';
-
-const screenWidth = Dimensions.get('window').width;
 
 interface HabitWithStats extends Habit {
   streak: number;
@@ -20,11 +17,10 @@ interface Stats {
   percentage: number;
 }
 
-interface ChartData {
-  labels: string[];
-  datasets: [{
-    data: number[];
-  }];
+interface WeekData {
+  habitId: number;
+  habitName: string;
+  days: boolean[]; // Sun, Mon, Tue, Wed, Thu, Fri, Sat
 }
 
 type TimeFrame = '7days' | '30days' | '12months';
@@ -32,22 +28,8 @@ type TimeFrame = '7days' | '30days' | '12months';
 export function DashboardScreen() {
   const { currentTheme } = useTheme();
   const [habits, setHabits] = useState<HabitWithStats[]>([]);
+  const [weekData, setWeekData] = useState<WeekData[]>([]);
   const [todayStats, setTodayStats] = useState<Stats>({ total: 0, completed: 0, percentage: 0 });
-  
-  // Chart data - Initialize with default values
-  const [weekChart, setWeekChart] = useState<ChartData>({ 
-    labels: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], 
-    datasets: [{ data: [0, 0, 0, 0, 0, 0, 0, 1] }] 
-  });
-  const [monthChart, setMonthChart] = useState<ChartData>({ 
-    labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'], 
-    datasets: [{ data: [0, 0, 0, 0, 1] }] 
-  });
-  const [yearChart, setYearChart] = useState<ChartData>({ 
-    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], 
-    datasets: [{ data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1] }] 
-  });
-  
   const [timeFrame, setTimeFrame] = useState<TimeFrame>('7days');
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -83,8 +65,8 @@ export function DashboardScreen() {
       
       setTodayStats({ total, completed, percentage });
 
-      // Load chart data
-      await loadChartData(habitsWithStats);
+      // Load week data for grid view
+      await loadWeekData(habitsWithStats);
     } catch (error) {
       console.error('Error loading analytics:', error);
     } finally {
@@ -92,104 +74,36 @@ export function DashboardScreen() {
     }
   };
 
-  const loadChartData = async (habits: HabitWithStats[]) => {
+  const loadWeekData = async (habits: HabitWithStats[]) => {
     const today = new Date();
-
-    if (habits.length === 0) {
-      setWeekChart({
-        labels: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
-        datasets: [{ data: [0, 0, 0, 0, 0, 0, 0, 0] }]
-      });
-      setMonthChart({
-        labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
-        datasets: [{ data: [0, 0, 0, 0, 0] }]
-      });
-      setYearChart({
-        labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-        datasets: [{ data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }]
-      });
-      return;
-    }
-
-    // Last 7 days (Sun to Sat)
-    const last7Days = [];
-    const last7DaysLabels = [];
     const currentDayOfWeek = today.getDay();
     const lastSunday = new Date(today);
     lastSunday.setDate(today.getDate() - currentDayOfWeek);
-    
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(lastSunday);
-      date.setDate(lastSunday.getDate() + i);
-      const dateStr = date.toISOString().split('T')[0];
-      
-      let completed = 0;
-      for (const habit of habits) {
+
+    const weekDataArray: WeekData[] = [];
+
+    for (const habit of habits) {
+      const days = [false, false, false, false, false, false, false];
+
+      for (let i = 0; i < 7; i++) {
+        const date = new Date(lastSunday);
+        date.setDate(lastSunday.getDate() + i);
+        const dateStr = date.toISOString().split('T')[0];
+
         const logs = await db.getHabitLogs(habit.id, dateStr, dateStr);
         if (logs.length > 0 && logs[0].completed) {
-          completed++;
+          days[i] = true;
         }
       }
-      
-      last7Days.push(completed);
-      last7DaysLabels.push(['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][i]);
+
+      weekDataArray.push({
+        habitId: habit.id,
+        habitName: habit.name,
+        days,
+      });
     }
 
-    setWeekChart({
-      labels: last7DaysLabels,
-      datasets: [{ data: [...last7Days, habits.length] }]
-    });
-
-    // Last 30 days (grouped by week)
-    const weeks = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
-    const weeklyData = [0, 0, 0, 0];
-    
-    for (let i = 0; i < 30; i++) {
-      const date = new Date(today);
-      date.setDate(date.getDate() - i);
-      const dateStr = date.toISOString().split('T')[0];
-      const weekIndex = Math.floor(i / 7);
-      
-      if (weekIndex < 4) {
-        for (const habit of habits) {
-          const logs = await db.getHabitLogs(habit.id, dateStr, dateStr);
-          if (logs.length > 0 && logs[0].completed) {
-            weeklyData[3 - weekIndex]++;
-          }
-        }
-      }
-    }
-
-    setMonthChart({
-      labels: weeks,
-      datasets: [{ data: [...weeklyData, habits.length] }]
-    });
-
-    // Last 12 months
-    const months = [];
-    const monthlyData = [];
-    
-    for (let i = 11; i >= 0; i--) {
-      const date = new Date(today);
-      date.setMonth(date.getMonth() - i);
-      months.push(date.toLocaleDateString('en-US', { month: 'short' }));
-      
-      const startDate = new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0];
-      const endDate = new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0];
-      
-      let completed = 0;
-      for (const habit of habits) {
-        const logs = await db.getHabitLogs(habit.id, startDate, endDate);
-        completed += logs.filter(l => l.completed).length;
-      }
-      
-      monthlyData.push(completed);
-    }
-
-    setYearChart({
-      labels: months,
-      datasets: [{ data: [...monthlyData, habits.length] }]
-    });
+    setWeekData(weekDataArray);
   };
 
   useFocusEffect(
@@ -204,63 +118,89 @@ export function DashboardScreen() {
     setRefreshing(false);
   };
 
-  const chartConfig = {
-    backgroundColor: currentTheme.colors[1],
-    backgroundGradientFrom: currentTheme.colors[1],
-    backgroundGradientTo: currentTheme.colors[2],
-    decimalPlaces: 0,
-    color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-    labelColor: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-    style: {
-      borderRadius: 16,
-    },
-    propsForLabels: {
-      fontSize: 10,
-    },
-  };
-
-  const renderChart = () => {
-    let chartData = weekChart;
-    let title = 'Last 7 Days (Sun - Sat)';
-    
-    if (timeFrame === '30days') {
-      chartData = monthChart;
-      title = 'Last 30 Days (by week)';
-    } else if (timeFrame === '12months') {
-      chartData = yearChart;
-      title = 'Last 12 Months';
-    }
-
-    if (chartData.labels.length === 0 || chartData.datasets[0].data.length === 0) {
+  const renderWeekGrid = () => {
+    if (habits.length === 0) {
       return (
-        <View style={styles.chartContainer}>
-          <Text style={[styles.chartTitle, { color: currentTheme.textPrimary }]}>
-            {title}
+        <View style={[styles.emptyState, { backgroundColor: currentTheme.cardBackground }]}>
+          <Text style={[styles.emptyText, { color: currentTheme.textSecondary }]}>
+            No habits to track yet.{'\n'}Add some habits in Settings to get started!
           </Text>
-          <View style={{ height: 220, justifyContent: 'center', alignItems: 'center' }}>
-            <Text style={{ color: currentTheme.textSecondary }}>Loading chart...</Text>
-          </View>
         </View>
       );
     }
 
+    const dayLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
     return (
-      <View style={styles.chartContainer}>
-        <Text style={[styles.chartTitle, { color: currentTheme.textPrimary }]}>
-          {title}
+      <View style={styles.gridContainer}>
+        {/* Header Row */}
+        <View style={styles.gridRow}>
+          <View style={[styles.gridCell, styles.headerCell, styles.habitNameCell]}>
+            <Text style={[styles.headerText, { color: currentTheme.textPrimary }]}>
+              Habit
+            </Text>
+          </View>
+          {dayLabels.map((day, index) => (
+            <View key={index} style={[styles.gridCell, styles.headerCell, styles.dayCell]}>
+              <Text style={[styles.headerText, { color: currentTheme.textPrimary }]}>
+                {day}
+              </Text>
+            </View>
+          ))}
+        </View>
+
+        {/* Data Rows */}
+        {weekData.map((habit, habitIndex) => (
+          <View 
+            key={habit.habitId} 
+            style={[
+              styles.gridRow,
+              habitIndex % 2 === 0 && { backgroundColor: currentTheme.cardBackground }
+            ]}
+          >
+            <View style={[styles.gridCell, styles.habitNameCell]}>
+              <Text 
+                style={[styles.habitText, { color: currentTheme.textPrimary }]}
+                numberOfLines={2}
+              >
+                {habit.habitName}
+              </Text>
+            </View>
+            {habit.days.map((completed, dayIndex) => (
+              <View key={dayIndex} style={[styles.gridCell, styles.dayCell]}>
+                <View style={[
+                  styles.checkbox,
+                  { borderColor: currentTheme.accent },
+                  completed && { backgroundColor: currentTheme.accent }
+                ]}>
+                  {completed && (
+                    <Text style={styles.checkmark}>✓</Text>
+                  )}
+                </View>
+              </View>
+            ))}
+          </View>
+        ))}
+      </View>
+    );
+  };
+
+  const render30DaysView = () => {
+    return (
+      <View style={[styles.placeholderView, { backgroundColor: currentTheme.cardBackground }]}>
+        <Text style={[styles.placeholderText, { color: currentTheme.textSecondary }]}>
+          30 Days view - Coming soon
         </Text>
-        <BarChart
-          data={chartData}
-          width={screenWidth - 48}
-          height={220}
-          chartConfig={chartConfig}
-          style={styles.chart}
-          yAxisLabel=""
-          yAxisSuffix=""
-          fromZero
-          showValuesOnTopOfBars
-          segments={habits.length > 0 ? habits.length : 1}
-        />
+      </View>
+    );
+  };
+
+  const render12MonthsView = () => {
+    return (
+      <View style={[styles.placeholderView, { backgroundColor: currentTheme.cardBackground }]}>
+        <Text style={[styles.placeholderText, { color: currentTheme.textSecondary }]}>
+          12 Months view - Coming soon
+        </Text>
       </View>
     );
   };
@@ -320,84 +260,77 @@ export function DashboardScreen() {
         </View>
 
         {/* Habits Progress Section */}
-        {habits.length > 0 && (
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: currentTheme.textPrimary }]}>
-              Habits Progress
-            </Text>
-            <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>
-              Total Habits: {habits.length}
-            </Text>
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: currentTheme.textPrimary }]}>
+            Habits Progress
+          </Text>
+          <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>
+            Total Habits: {habits.length}
+          </Text>
 
-            {/* Tabs */}
-            <View style={styles.tabContainer}>
-              <TouchableOpacity
+          {/* Tabs */}
+          <View style={styles.tabContainer}>
+            <TouchableOpacity
+              style={[
+                styles.tab,
+                { backgroundColor: currentTheme.cardBackground },
+                timeFrame === '7days' && { backgroundColor: currentTheme.accent },
+              ]}
+              onPress={() => setTimeFrame('7days')}
+            >
+              <Text
                 style={[
-                  styles.tab,
-                  { backgroundColor: currentTheme.cardBackground },
-                  timeFrame === '7days' && { backgroundColor: currentTheme.accent },
+                  styles.tabText,
+                  { color: currentTheme.textSecondary },
+                  timeFrame === '7days' && { color: '#FFFFFF', fontWeight: 'bold' },
                 ]}
-                onPress={() => setTimeFrame('7days')}
               >
-                <Text
-                  style={[
-                    styles.tabText,
-                    { color: currentTheme.textSecondary },
-                    timeFrame === '7days' && { color: '#FFFFFF', fontWeight: 'bold' },
-                  ]}
-                >
-                  7 Days
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
+                7 Days
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.tab,
+                { backgroundColor: currentTheme.cardBackground },
+                timeFrame === '30days' && { backgroundColor: currentTheme.accent },
+              ]}
+              onPress={() => setTimeFrame('30days')}
+            >
+              <Text
                 style={[
-                  styles.tab,
-                  { backgroundColor: currentTheme.cardBackground },
-                  timeFrame === '30days' && { backgroundColor: currentTheme.accent },
+                  styles.tabText,
+                  { color: currentTheme.textSecondary },
+                  timeFrame === '30days' && { color: '#FFFFFF', fontWeight: 'bold' },
                 ]}
-                onPress={() => setTimeFrame('30days')}
               >
-                <Text
-                  style={[
-                    styles.tabText,
-                    { color: currentTheme.textSecondary },
-                    timeFrame === '30days' && { color: '#FFFFFF', fontWeight: 'bold' },
-                  ]}
-                >
-                  30 Days
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
+                30 Days
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.tab,
+                { backgroundColor: currentTheme.cardBackground },
+                timeFrame === '12months' && { backgroundColor: currentTheme.accent },
+              ]}
+              onPress={() => setTimeFrame('12months')}
+            >
+              <Text
                 style={[
-                  styles.tab,
-                  { backgroundColor: currentTheme.cardBackground },
-                  timeFrame === '12months' && { backgroundColor: currentTheme.accent },
+                  styles.tabText,
+                  { color: currentTheme.textSecondary },
+                  timeFrame === '12months' && { color: '#FFFFFF', fontWeight: 'bold' },
                 ]}
-                onPress={() => setTimeFrame('12months')}
               >
-                <Text
-                  style={[
-                    styles.tabText,
-                    { color: currentTheme.textSecondary },
-                    timeFrame === '12months' && { color: '#FFFFFF', fontWeight: 'bold' },
-                  ]}
-                >
-                  12 Months
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {renderChart()}
+                12 Months
+              </Text>
+            </TouchableOpacity>
           </View>
-        )}
 
-        {habits.length === 0 && (
-          <View style={[styles.emptyState, { backgroundColor: currentTheme.cardBackground }]}>
-            <Text style={[styles.emptyText, { color: currentTheme.textSecondary }]}>
-              No habits to track yet.{'\n'}Add some habits in Settings to get started!
-            </Text>
-          </View>
-        )}
+          {/* Render appropriate view */}
+          {timeFrame === '7days' && renderWeekGrid()}
+          {timeFrame === '30days' && render30DaysView()}
+          {timeFrame === '12months' && render12MonthsView()}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -462,7 +395,7 @@ const styles = StyleSheet.create({
   tabContainer: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 16,
+    marginBottom: 20,
   },
   tab: {
     flex: 1,
@@ -474,16 +407,53 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  chartContainer: {
-    marginBottom: 20,
+  gridContainer: {
+    borderRadius: 12,
+    overflow: 'hidden',
   },
-  chartTitle: {
-    fontSize: 16,
+  gridRow: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  gridCell: {
+    padding: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerCell: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    paddingVertical: 12,
+  },
+  habitNameCell: {
+    width: 120, // Fixed width ~15 characters
+    alignItems: 'flex-start',
+    paddingLeft: 8,
+    paddingRight: 4,
+  },
+  dayCell: {
+    flex: 1,
+  },
+  headerText: {
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  habitText: {
+    fontSize: 12,
     fontWeight: '600',
-    marginBottom: 12,
   },
-  chart: {
-    borderRadius: 16,
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkmark: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
   emptyState: {
     borderRadius: 16,
@@ -494,5 +464,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
     lineHeight: 24,
+  },
+  placeholderView: {
+    borderRadius: 12,
+    padding: 40,
+    alignItems: 'center',
+  },
+  placeholderText: {
+    fontSize: 16,
+    textAlign: 'center',
   },
 });
