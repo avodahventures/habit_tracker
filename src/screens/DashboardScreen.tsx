@@ -74,20 +74,20 @@ function MonthCompletionCell({
   
   if (percentage >= 75) {
     // 75-100%: Dark Green
-    backgroundColor = '#22C55E'; // Dark green
+    backgroundColor = '#22C55E';
     textColor = '#FFFFFF';
   } else if (percentage >= 50) {
     // 50-74%: Yellowish Green
-    backgroundColor = '#BEF264'; // Yellowish lime green
-    textColor = '#3F6212'; // Dark green text for contrast
+    backgroundColor = '#BEF264';
+    textColor = '#3F6212';
   } else if (percentage > 0) {
     // 1-49%: Orange
-    backgroundColor = '#FB923C'; // Orange
+    backgroundColor = '#FB923C';
     textColor = '#FFFFFF';
   }
 
   return (
-    <View style={styles.yearGridCell}>
+    <View style={styles.yearMonthCell}>
       <View 
         style={[
           styles.yearCompletionBox,
@@ -97,7 +97,7 @@ function MonthCompletionCell({
           }
         ]}
       >
-        <Text style={[styles.yearCompletionText, { color: textColor, fontWeight: 'bold' }]}>
+        <Text style={[styles.yearCompletionText, { color: textColor }]}>
           {percentage}%
         </Text>
       </View>
@@ -1150,11 +1150,14 @@ const styles = StyleSheet.create({
     paddingRight: 4,
   },
   yearMonthCell: {
-    width: 55,
+    width: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   yearHeaderText: {
     fontSize: 11,
     fontWeight: 'bold',
+    textAlign: 'center',
   },
   yearCompletionBox: {
     width: 48,
