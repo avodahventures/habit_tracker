@@ -21,7 +21,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const loadTheme = async () => {
     try {
       const savedTheme = await AsyncStorage.getItem('appTheme');
-      if (savedTheme && (savedTheme === 'nightSky' || savedTheme === 'amberGold' || savedTheme === 'pureBlack')) {
+      if (savedTheme && savedTheme in themes) {
         setThemeType(savedTheme as ThemeType);
         setCurrentTheme(themes[savedTheme as ThemeType]);
       }
