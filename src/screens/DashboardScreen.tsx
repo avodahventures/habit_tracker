@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -25,6 +25,86 @@ interface WeekData {
 
 type TimeFrame = '7days' | '30days' | '12months';
 
+// MonthCompletionCell Component
+function MonthCompletionCell({ 
+  habitId, 
+  startDate, 
+  endDate, 
+  currentTheme 
+}: { 
+  habitId: number; 
+  startDate: Date; 
+  endDate: Date; 
+  currentTheme: any;
+}) {
+  const [completionData, setCompletionData] = useState<{ completed: number; total: number } | null>(null);
+
+  useEffect(() => {
+    loadCompletionData();
+  }, [habitId, startDate, endDate]);
+
+  const loadCompletionData = async () => {
+    const startStr = startDate.toISOString().split('T')[0];
+    const endStr = endDate.toISOString().split('T')[0];
+    
+    const logs = await db.getHabitLogs(habitId, startStr, endStr);
+    const completed = logs.filter(l => l.completed).length;
+    const totalDays = Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    
+    setCompletionData({ completed, total: totalDays });
+  };
+
+  if (!completionData) {
+    return (
+      <View style={styles.yearGridCell}>
+        <View style={[styles.yearCompletionBox, { borderColor: currentTheme.cardBorder }]}>
+          <Text style={[styles.yearCompletionText, { color: currentTheme.textSecondary }]}>-</Text>
+        </View>
+      </View>
+    );
+  }
+
+  const percentage = completionData.total > 0 
+    ? Math.round((completionData.completed / completionData.total) * 100) 
+    : 0;
+
+  // Color coding based on percentage
+  let backgroundColor = 'transparent';
+  let textColor = currentTheme.textPrimary;
+  
+  if (percentage >= 75) {
+    // 75-100%: Dark Green
+    backgroundColor = '#22C55E'; // Dark green
+    textColor = '#FFFFFF';
+  } else if (percentage >= 50) {
+    // 50-74%: Yellowish Green
+    backgroundColor = '#BEF264'; // Yellowish lime green
+    textColor = '#3F6212'; // Dark green text for contrast
+  } else if (percentage > 0) {
+    // 1-49%: Orange
+    backgroundColor = '#FB923C'; // Orange
+    textColor = '#FFFFFF';
+  }
+
+  return (
+    <View style={styles.yearGridCell}>
+      <View 
+        style={[
+          styles.yearCompletionBox,
+          { 
+            borderColor: currentTheme.cardBorder,
+            backgroundColor 
+          }
+        ]}
+      >
+        <Text style={[styles.yearCompletionText, { color: textColor, fontWeight: 'bold' }]}>
+          {percentage}%
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 export function DashboardScreen() {
   const { currentTheme } = useTheme();
   const [habits, setHabits] = useState<HabitWithStats[]>([]);
@@ -33,6 +113,7 @@ export function DashboardScreen() {
   const [timeFrame, setTimeFrame] = useState<TimeFrame>('7days');
   const [selectedWeekStart, setSelectedWeekStart] = useState<Date>(getLastSunday(new Date()));
   const [selectedMonth, setSelectedMonth] = useState<Date>(new Date());
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [monthData, setMonthData] = useState<Map<number, boolean[]>>(new Map());
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -213,6 +294,18 @@ export function DashboardScreen() {
 
   const goToCurrentMonth = () => {
     setSelectedMonth(new Date());
+  };
+
+  const changeYear = (direction: 'prev' | 'next') => {
+    if (direction === 'prev') {
+      setSelectedYear(selectedYear - 1);
+    } else {
+      setSelectedYear(selectedYear + 1);
+    }
+  };
+
+  const goToCurrentYear = () => {
+    setSelectedYear(new Date().getFullYear());
   };
 
   const renderWeekSelector = () => {
@@ -493,11 +586,114 @@ export function DashboardScreen() {
   };
 
   const render12MonthsView = () => {
+    if (habits.length === 0) {
+      return (
+        <View style={[styles.emptyState, { backgroundColor: currentTheme.cardBackground }]}>
+          <Text style={[styles.emptyText, { color: currentTheme.textSecondary }]}>
+            No habits to track yet.{'\n'}Add some habits in Settings to get started!
+          </Text>
+        </View>
+      );
+    }
+
+    // Generate 12 months for the selected year (Jan to Dec)
+    const months: Date[] = [];
+    const monthLabels: string[] = [];
+    
+    for (let i = 0; i < 12; i++) {
+      const date = new Date(selectedYear, i, 1);
+      months.push(date);
+      monthLabels.push(date.toLocaleDateString('en-US', { month: 'short' }));
+    }
+
+    const isCurrentYear = selectedYear === new Date().getFullYear();
+
     return (
-      <View style={[styles.placeholderView, { backgroundColor: currentTheme.cardBackground }]}>
-        <Text style={[styles.placeholderText, { color: currentTheme.textSecondary }]}>
-          12 Months view - Coming soon
-        </Text>
+      <View>
+        {/* Year Selector */}
+        <View style={styles.yearSelectorContainer}>
+          <TouchableOpacity
+            style={[styles.yearButton, { backgroundColor: currentTheme.cardBackground }]}
+            onPress={() => changeYear('prev')}
+          >
+            <Text style={[styles.yearButtonText, { color: currentTheme.textPrimary }]}>←</Text>
+          </TouchableOpacity>
+
+          <View style={[styles.yearDisplay, { backgroundColor: currentTheme.cardBackground }]}>
+            <Text style={[styles.yearText, { color: currentTheme.textPrimary }]}>
+              {selectedYear}
+            </Text>
+            {!isCurrentYear && (
+              <TouchableOpacity onPress={goToCurrentYear}>
+                <Text style={[styles.todayButton, { color: currentTheme.accent }]}>
+                  This Year
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <TouchableOpacity
+            style={[styles.yearButton, { backgroundColor: currentTheme.cardBackground }]}
+            onPress={() => changeYear('next')}
+          >
+            <Text style={[styles.yearButtonText, { color: currentTheme.textPrimary }]}>→</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* 12 Months Grid */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={true}>
+          <View style={styles.yearGridContainer}>
+            {/* Header Row */}
+            <View style={styles.yearGridRow}>
+              <View style={[styles.yearGridCell, styles.yearHeaderCell, styles.yearHabitNameCell]}>
+                <Text style={[styles.headerText, { color: currentTheme.textPrimary }]}>
+                  Habit
+                </Text>
+              </View>
+              {monthLabels.map((month, index) => (
+                <View key={index} style={[styles.yearGridCell, styles.yearHeaderCell, styles.yearMonthCell]}>
+                  <Text style={[styles.yearHeaderText, { color: currentTheme.textPrimary }]}>
+                    {month}
+                  </Text>
+                </View>
+              ))}
+            </View>
+
+            {/* Habit Rows */}
+            {habits.map((habit, habitIndex) => (
+              <View 
+                key={habit.id} 
+                style={[
+                  styles.yearGridRow,
+                  habitIndex % 2 === 0 && { backgroundColor: currentTheme.cardBackground }
+                ]}
+              >
+                <View style={[styles.yearGridCell, styles.yearHabitNameCell]}>
+                  <Text 
+                    style={[styles.habitText, { color: currentTheme.textPrimary }]}
+                    numberOfLines={2}
+                  >
+                    {habit.name}
+                  </Text>
+                </View>
+                {months.map((monthDate, monthIndex) => {
+                  const startDate = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+                  const endDate = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0);
+                  
+                  return (
+                    <MonthCompletionCell
+                      key={monthIndex}
+                      habitId={habit.id}
+                      startDate={startDate}
+                      endDate={endDate}
+                      currentTheme={currentTheme}
+                    />
+                  );
+                })}
+              </View>
+            ))}
+          </View>
+        </ScrollView>
       </View>
     );
   };
@@ -772,6 +968,36 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
+  yearSelectorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+    gap: 8,
+  },
+  yearButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  yearButtonText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  yearDisplay: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  yearText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
   habitCalendarCard: {
     borderRadius: 12,
     padding: 16,
@@ -897,5 +1123,49 @@ const styles = StyleSheet.create({
   placeholderText: {
     fontSize: 16,
     textAlign: 'center',
+  },
+  yearGridContainer: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  yearGridRow: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+    minHeight: 50,
+  },
+  yearGridCell: {
+    padding: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  yearHeaderCell: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    paddingVertical: 10,
+  },
+  yearHabitNameCell: {
+    width: 100,
+    alignItems: 'flex-start',
+    paddingLeft: 8,
+    paddingRight: 4,
+  },
+  yearMonthCell: {
+    width: 55,
+  },
+  yearHeaderText: {
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  yearCompletionBox: {
+    width: 48,
+    height: 32,
+    borderRadius: 6,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  yearCompletionText: {
+    fontSize: 10,
+    fontWeight: 'bold',
   },
 });
