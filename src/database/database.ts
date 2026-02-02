@@ -1,49 +1,74 @@
 import * as SQLite from 'expo-sqlite';
 
-// Type definitions
-interface Habit {
+export interface Habit {
   id: number;
   name: string;
   icon: string;
   color: string;
   frequency: string;
-  targetDays: string;
   createdAt: string;
 }
 
-interface HabitLog {
+export interface HabitLog {
   id: number;
   habitId: number;
   date: string;
   completed: number;
 }
 
-interface HabitLogWithDetails extends HabitLog {
-  name: string;
-  icon: string;
-  color: string;
-  frequency: string;
+export interface HabitLogWithDetails extends HabitLog {
+  habitName: string;
+  habitIcon: string;
 }
 
-interface JournalEntry {
+export interface JournalEntry {
   id: number;
   date: string;
   content: string;
   createdAt: string;
 }
 
-interface HabitStats {
-  totalCompleted: number;
+export interface HabitStats {
   currentStreak: number;
+  totalCompleted: number;
 }
 
 class Database {
-  private database: SQLite.SQLiteDatabase | null = null;
+  private db: SQLite.SQLiteDatabase | null = null;
 
   async init() {
     try {
-      this.database = await SQLite.openDatabaseAsync('habits.db');
-      await this.createTables();
+      this.db = SQLite.openDatabaseSync('habits.db');
+      
+      await this.db.execAsync(`
+        PRAGMA journal_mode = WAL;
+        
+        CREATE TABLE IF NOT EXISTS habits (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          icon TEXT NOT NULL,
+          color TEXT NOT NULL,
+          frequency TEXT NOT NULL,
+          createdAt TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS habit_logs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          habitId INTEGER NOT NULL,
+          date TEXT NOT NULL,
+          completed INTEGER NOT NULL DEFAULT 0,
+          FOREIGN KEY (habitId) REFERENCES habits (id) ON DELETE CASCADE,
+          UNIQUE(habitId, date)
+        );
+
+        CREATE TABLE IF NOT EXISTS journal_entries (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          date TEXT NOT NULL,
+          content TEXT NOT NULL,
+          createdAt TEXT NOT NULL
+        );
+      `);
+
       console.log('Database initialized successfully');
     } catch (error) {
       console.error('Error initializing database:', error);
@@ -51,65 +76,26 @@ class Database {
     }
   }
 
-  private async createTables() {
-    if (!this.database) {
-      throw new Error('Database not initialized');
-    }
-
-    await this.database.execAsync(`
-      CREATE TABLE IF NOT EXISTS habits (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        icon TEXT NOT NULL,
-        color TEXT NOT NULL,
-        frequency TEXT NOT NULL,
-        targetDays TEXT,
-        createdAt TEXT NOT NULL
-      );
-    `);
-
-    await this.database.execAsync(`
-      CREATE TABLE IF NOT EXISTS habit_logs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        habitId INTEGER NOT NULL,
-        date TEXT NOT NULL,
-        completed INTEGER NOT NULL DEFAULT 0,
-        FOREIGN KEY (habitId) REFERENCES habits (id) ON DELETE CASCADE,
-        UNIQUE(habitId, date)
-      );
-    `);
-
-    await this.database.execAsync(`
-      CREATE TABLE IF NOT EXISTS journal_entries (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        date TEXT NOT NULL,
-        content TEXT NOT NULL,
-        createdAt TEXT NOT NULL
-      );
-    `);
-  }
-
   getDatabase(): SQLite.SQLiteDatabase {
-    if (!this.database) {
-      throw new Error('Database not open. Call init() first.');
+    if (!this.db) {
+      throw new Error('Database not initialized. Call init() first.');
     }
-    return this.database;
+    return this.db;
   }
 
-  // Habits methods
   async getHabits(): Promise<Habit[]> {
     const database = this.getDatabase();
     const result = await database.getAllAsync('SELECT * FROM habits ORDER BY createdAt DESC');
     return result as Habit[];
   }
 
-  async addHabit(habit: { name: string; icon: string; color: string; frequency: string; targetDays?: string }): Promise<number> {
+  async addHabit(habit: Omit<Habit, 'id' | 'createdAt'>): Promise<void> {
     const database = this.getDatabase();
-    const result = await database.runAsync(
-      'INSERT INTO habits (name, icon, color, frequency, targetDays, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
-      [habit.name, habit.icon, habit.color, habit.frequency, habit.targetDays || '', new Date().toISOString()]
+    const createdAt = new Date().toISOString();
+    await database.runAsync(
+      'INSERT INTO habits (name, icon, color, frequency, createdAt) VALUES (?, ?, ?, ?, ?)',
+      [habit.name, habit.icon, habit.color, habit.frequency, createdAt]
     );
-    return result.lastInsertRowId;
   }
 
   async deleteHabit(id: number): Promise<void> {
@@ -117,22 +103,19 @@ class Database {
     await database.runAsync('DELETE FROM habits WHERE id = ?', [id]);
   }
 
-  // Habit logs methods
-  async getTodayLogs(): Promise<HabitLogWithDetails[]> {
+  async getTodayLogs(): Promise<HabitLog[]> {
     const database = this.getDatabase();
     const today = new Date().toISOString().split('T')[0];
     const result = await database.getAllAsync(
-      `SELECT hl.*, h.name, h.icon, h.color, h.frequency 
-       FROM habit_logs hl 
-       JOIN habits h ON hl.habitId = h.id 
-       WHERE hl.date = ?`,
+      'SELECT * FROM habit_logs WHERE date = ?',
       [today]
     );
-    return result as HabitLogWithDetails[];
+    return result as HabitLog[];
   }
 
   async toggleHabitLog(habitId: number, date: string): Promise<void> {
     const database = this.getDatabase();
+    
     const existing = await database.getFirstAsync(
       'SELECT * FROM habit_logs WHERE habitId = ? AND date = ?',
       [habitId, date]
@@ -140,8 +123,8 @@ class Database {
 
     if (existing) {
       await database.runAsync(
-        'UPDATE habit_logs SET completed = ? WHERE habitId = ? AND date = ?',
-        [existing.completed ? 0 : 1, habitId, date]
+        'UPDATE habit_logs SET completed = ? WHERE id = ?',
+        [existing.completed ? 0 : 1, existing.id]
       );
     } else {
       await database.runAsync(
@@ -160,66 +143,50 @@ class Database {
     return result as HabitLog[];
   }
 
-  async getAllLogs(): Promise<HabitLog[]> {
-  const database = this.getDatabase();
-  const result = await database.getAllAsync('SELECT * FROM habit_logs ORDER BY date DESC');
-  return result as HabitLog[];
-  }
-
-  async deleteHabitLog(id: number): Promise<void> {
-  const database = this.getDatabase();
-  await database.runAsync('DELETE FROM habit_logs WHERE id = ?', [id]);
-  }
-
   async getHabitStats(habitId: number): Promise<HabitStats> {
     const database = this.getDatabase();
     
-    // Get total completed logs
-    const totalResult = await database.getFirstAsync(
-      'SELECT COUNT(*) as total FROM habit_logs WHERE habitId = ? AND completed = 1',
-      [habitId]
-    ) as { total: number } | null;
-
-    // Get current streak
     const logs = await database.getAllAsync(
-      'SELECT date, completed FROM habit_logs WHERE habitId = ? ORDER BY date DESC',
+      'SELECT * FROM habit_logs WHERE habitId = ? ORDER BY date DESC',
       [habitId]
     ) as HabitLog[];
 
+    const totalCompleted = logs.filter(log => log.completed).length;
+    
     let currentStreak = 0;
     const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
     
-    for (let i = 0; i < logs.length; i++) {
-      const logDate = new Date(logs[i].date);
-      const daysDiff = Math.floor((today.getTime() - logDate.getTime()) / (1000 * 60 * 60 * 24));
+    for (let i = 0; i < 365; i++) {
+      const checkDate = new Date(today);
+      checkDate.setDate(today.getDate() - i);
+      const dateStr = checkDate.toISOString().split('T')[0];
       
-      if (daysDiff === i && logs[i].completed) {
+      const log = logs.find(l => l.date === dateStr);
+      
+      if (log && log.completed) {
         currentStreak++;
-      } else {
+      } else if (dateStr !== todayStr) {
         break;
       }
     }
 
-    return {
-      totalCompleted: totalResult?.total || 0,
-      currentStreak,
-    };
+    return { currentStreak, totalCompleted };
   }
 
-  // Journal methods
   async getJournalEntries(): Promise<JournalEntry[]> {
     const database = this.getDatabase();
     const result = await database.getAllAsync('SELECT * FROM journal_entries ORDER BY date DESC');
     return result as JournalEntry[];
   }
 
-  async addJournalEntry(date: string, content: string): Promise<number> {
+  async addJournalEntry(date: string, content: string): Promise<void> {
     const database = this.getDatabase();
-    const result = await database.runAsync(
+    const createdAt = new Date().toISOString();
+    await database.runAsync(
       'INSERT INTO journal_entries (date, content, createdAt) VALUES (?, ?, ?)',
-      [date, content, new Date().toISOString()]
+      [date, content, createdAt]
     );
-    return result.lastInsertRowId;
   }
 
   async updateJournalEntry(id: number, content: string): Promise<void> {
@@ -234,18 +201,6 @@ class Database {
     const database = this.getDatabase();
     await database.runAsync('DELETE FROM journal_entries WHERE id = ?', [id]);
   }
-
-  async getJournalEntryByDate(date: string): Promise<JournalEntry | null> {
-    const database = this.getDatabase();
-    const result = await database.getFirstAsync(
-      'SELECT * FROM journal_entries WHERE date = ?',
-      [date]
-    );
-    return result as JournalEntry | null;
-  }
 }
 
 export const db = new Database();
-
-// Export types for use in other files
-export type { Habit, HabitLog, HabitLogWithDetails, JournalEntry, HabitStats };

@@ -6,7 +6,6 @@ import { HabitTrackerScreen } from '../screens/HabitTrackerScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
 import { JournalScreen } from '../screens/JournalScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
-import { DebugScreen } from '../screens/DebugScreen';
 
 const Tab = createBottomTabNavigator();
 
@@ -68,16 +67,6 @@ export function AppNavigator() {
             tabBarLabel: 'Settings',
             tabBarIcon: ({ color, size }) => (
               <Text style={{ fontSize: size, color }}>⚙️</Text>
-            ),
-          }}
-        />
-        <Tab.Screen 
-          name="Debug" 
-          component={DebugScreen}
-          options={{
-            tabBarLabel: 'Debug',
-            tabBarIcon: ({ color, size }) => (
-              <Text style={{ fontSize: size, color }}>🔍</Text>
             ),
           }}
         />
