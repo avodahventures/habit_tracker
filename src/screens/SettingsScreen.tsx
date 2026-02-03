@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Modal, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../context/ThemeContext';
 import { usePremium } from '../context/PremiumContext';
 import { themes, ThemeType } from '../utils/themes';
@@ -76,6 +77,33 @@ export function SettingsScreen() {
     );
   };
 
+  const handleResetOnboarding = () => {
+    Alert.alert(
+      'Reset Onboarding',
+      'This will clear your onboarding status. You\'ll need to close and restart the app to see the onboarding screens again. Continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await AsyncStorage.removeItem('hasCompletedOnboarding');
+              Alert.alert(
+                'Success',
+                'Onboarding reset! Please close the app completely and restart it to see the onboarding screens.',
+                [{ text: 'OK' }]
+              );
+            } catch (error) {
+              console.error('Error resetting onboarding:', error);
+              Alert.alert('Error', 'Failed to reset onboarding');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: currentTheme.colors[0] }]}>
       <ScrollView style={styles.content}>
@@ -144,6 +172,23 @@ export function SettingsScreen() {
               )}
             </View>
           )}
+        </View>
+
+        {/* Reset Onboarding - For Testing */}
+        <View style={styles.section}>
+          <TouchableOpacity
+            style={[styles.sectionHeaderButton, { backgroundColor: currentTheme.cardBackground }]}
+            onPress={handleResetOnboarding}
+          >
+            <View style={styles.sectionHeaderLeft}>
+              <Text style={[styles.sectionTitle, { color: currentTheme.textPrimary }]}>
+                🔄 Reset Onboarding
+              </Text>
+              <View style={[styles.badge, { backgroundColor: '#F59E0B' }]}>
+                <Text style={styles.badgeText}>Testing</Text>
+              </View>
+            </View>
+          </TouchableOpacity>
         </View>
 
         {/* Theme Section - Collapsible */}
