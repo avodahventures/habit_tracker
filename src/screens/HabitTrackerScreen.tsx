@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
 import { db, Habit } from '../database/database';
@@ -9,10 +9,34 @@ interface HabitWithCompletion extends Habit {
   completedToday: boolean;
 }
 
+interface VerseOfTheDay {
+  date: string;
+  reference: string;
+  text: string;
+  bibleGatewayUrl: string;
+}
+
+// Import verses from JSON file
+const verses: VerseOfTheDay[] = require('../../assets/verses.json');
+
+// Get verse for today's date
+function getVerseOfTheDay(): VerseOfTheDay {
+  const today = new Date();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  const dateKey = `${month}-${day}`;
+  
+  const verse = verses.find(v => v.date === dateKey);
+  
+  // Fallback to first verse if date not found (shouldn't happen with 365 verses)
+  return verse || verses[0];
+}
+
 export function HabitTrackerScreen() {
   const { currentTheme } = useTheme();
   const [habits, setHabits] = useState<HabitWithCompletion[]>([]);
   const [loading, setLoading] = useState(true);
+  const [verseOfTheDay] = useState<VerseOfTheDay>(getVerseOfTheDay());
 
   useFocusEffect(
     React.useCallback(() => {
@@ -54,6 +78,19 @@ export function HabitTrackerScreen() {
     }
   };
 
+  const openBibleGateway = async (url: string) => {
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        console.error("Don't know how to open URI: " + url);
+      }
+    } catch (error) {
+      console.error('Error opening Bible Gateway:', error);
+    }
+  };
+
   if (loading) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: currentTheme.colors[0] }]}>
@@ -85,6 +122,34 @@ export function HabitTrackerScreen() {
           data={habits}
           keyExtractor={(item) => item.id.toString()}
           contentContainerStyle={styles.listContent}
+          ListFooterComponent={
+            /* Verse of the Day */
+            <View style={[styles.verseCard, { backgroundColor: currentTheme.cardBackground }]}>
+              <View style={styles.verseHeader}>
+                <Text style={styles.verseIcon}>📖</Text>
+                <Text style={[styles.verseTitle, { color: currentTheme.textPrimary }]}>
+                  Verse of the Day
+                </Text>
+              </View>
+              
+              <Text style={[styles.verseReference, { color: currentTheme.accent }]}>
+                {verseOfTheDay.reference} (KJV)
+              </Text>
+              
+              <Text style={[styles.verseText, { color: currentTheme.textPrimary }]}>
+                "{verseOfTheDay.text}"
+              </Text>
+
+              <TouchableOpacity
+                style={[styles.bibleGatewayButton, { backgroundColor: currentTheme.accent }]}
+                onPress={() => openBibleGateway(verseOfTheDay.bibleGatewayUrl)}
+              >
+                <Text style={styles.bibleGatewayButtonText}>
+                  Read Full Chapter on Bible Gateway 🔗
+                </Text>
+              </TouchableOpacity>
+            </View>
+          }
           renderItem={({ item }) => (
             <TouchableOpacity
               style={[
@@ -208,5 +273,46 @@ const styles = StyleSheet.create({
   },
   habitFrequency: {
     fontSize: 14,
+  },
+  verseCard: {
+    borderRadius: 16,
+    padding: 20,
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  verseHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  verseIcon: {
+    fontSize: 24,
+    marginRight: 8,
+  },
+  verseTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  verseReference: {
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  verseText: {
+    fontSize: 16,
+    lineHeight: 24,
+    fontStyle: 'italic',
+    marginBottom: 16,
+  },
+  bibleGatewayButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  bibleGatewayButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
 });
