@@ -25,6 +25,7 @@ export interface JournalEntry {
   id: number;
   date: string;
   content: string;
+  tags: string; // Comma-separated tags
   createdAt: string;
 }
 
@@ -65,9 +66,19 @@ class Database {
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           date TEXT NOT NULL,
           content TEXT NOT NULL,
+          tags TEXT DEFAULT '',
           createdAt TEXT NOT NULL
         );
       `);
+
+      // Add tags column if it doesn't exist (migration)
+      try {
+        await this.db.execAsync(`
+          ALTER TABLE journal_entries ADD COLUMN tags TEXT DEFAULT '';
+        `);
+      } catch (error) {
+        // Column already exists, ignore error
+      }
 
       console.log('Database initialized successfully');
     } catch (error) {
@@ -180,20 +191,38 @@ class Database {
     return result as JournalEntry[];
   }
 
-  async addJournalEntry(date: string, content: string): Promise<void> {
+  async searchJournalEntries(keyword: string): Promise<JournalEntry[]> {
+    const database = this.getDatabase();
+    const result = await database.getAllAsync(
+      'SELECT * FROM journal_entries WHERE content LIKE ? OR tags LIKE ? ORDER BY date DESC',
+      [`%${keyword}%`, `%${keyword}%`]
+    );
+    return result as JournalEntry[];
+  }
+
+  async getJournalEntriesByTag(tag: string): Promise<JournalEntry[]> {
+    const database = this.getDatabase();
+    const result = await database.getAllAsync(
+      'SELECT * FROM journal_entries WHERE tags LIKE ? ORDER BY date DESC',
+      [`%${tag}%`]
+    );
+    return result as JournalEntry[];
+  }
+
+  async addJournalEntry(date: string, content: string, tags: string = ''): Promise<void> {
     const database = this.getDatabase();
     const createdAt = new Date().toISOString();
     await database.runAsync(
-      'INSERT INTO journal_entries (date, content, createdAt) VALUES (?, ?, ?)',
-      [date, content, createdAt]
+      'INSERT INTO journal_entries (date, content, tags, createdAt) VALUES (?, ?, ?, ?)',
+      [date, content, tags, createdAt]
     );
   }
 
-  async updateJournalEntry(id: number, content: string): Promise<void> {
+  async updateJournalEntry(id: number, content: string, tags: string = ''): Promise<void> {
     const database = this.getDatabase();
     await database.runAsync(
-      'UPDATE journal_entries SET content = ? WHERE id = ?',
-      [content, id]
+      'UPDATE journal_entries SET content = ?, tags = ? WHERE id = ?',
+      [content, tags, id]
     );
   }
 

@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { AppNavigator } from './src/navigation/AppNavigator';
-import { OnboardingNavigator } from './src/navigation/OnboardingNavigator';
 import { ThemeProvider } from './src/context/ThemeContext';
+import { PremiumProvider } from './src/context/PremiumContext';
+import { OnboardingNavigator } from './src/navigation/OnboardingNavigator';
+import { AppNavigator } from './src/navigation/AppNavigator';
 import { db } from './src/database/database';
 
 export default function App() {
@@ -16,12 +17,12 @@ export default function App() {
 
   const initializeApp = async () => {
     try {
-      // Initialize database first
+      // Initialize database
       await db.init();
-      
+
       // Check onboarding status
-      const completed = await AsyncStorage.getItem('hasCompletedOnboarding');
-      setHasCompletedOnboarding(completed === 'true');
+      const onboardingComplete = await AsyncStorage.getItem('hasCompletedOnboarding');
+      setHasCompletedOnboarding(onboardingComplete === 'true');
     } catch (error) {
       console.error('Error initializing app:', error);
     } finally {
@@ -40,7 +41,7 @@ export default function App() {
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1E293B' }}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0F172A' }}>
         <ActivityIndicator size="large" color="#60A5FA" />
       </View>
     );
@@ -48,11 +49,13 @@ export default function App() {
 
   return (
     <ThemeProvider>
-      {hasCompletedOnboarding ? (
-        <AppNavigator />
-      ) : (
-        <OnboardingNavigator onComplete={handleOnboardingComplete} />
-      )}
+      <PremiumProvider>
+        {hasCompletedOnboarding ? (
+          <AppNavigator />
+        ) : (
+          <OnboardingNavigator onComplete={handleOnboardingComplete} />
+        )}
+      </PremiumProvider>
     </ThemeProvider>
   );
 }

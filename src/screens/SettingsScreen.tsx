@@ -2,11 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Modal, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
+import { usePremium } from '../context/PremiumContext';
 import { themes, ThemeType } from '../utils/themes';
 import { db, Habit } from '../database/database';
 
 export function SettingsScreen() {
   const { currentTheme, themeType, setTheme } = useTheme();
+  const { isPremium, setPremium } = usePremium();
   const [habits, setHabits] = useState<Habit[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [habitName, setHabitName] = useState('');
@@ -14,6 +16,7 @@ export function SettingsScreen() {
   // Collapsible state
   const [themeExpanded, setThemeExpanded] = useState(false);
   const [habitsExpanded, setHabitsExpanded] = useState(true);
+  const [premiumExpanded, setPremiumExpanded] = useState(false);
 
   useEffect(() => {
     loadHabits();
@@ -39,7 +42,7 @@ export function SettingsScreen() {
         name: habitName,
         icon: '📖',
         color: currentTheme.accent,
-        frequency: 'daily', // Always daily now
+        frequency: 'daily',
       });
 
       setModalVisible(false);
@@ -77,6 +80,71 @@ export function SettingsScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: currentTheme.colors[0] }]}>
       <ScrollView style={styles.content}>
         <Text style={[styles.title, { color: currentTheme.textPrimary }]}>Settings</Text>
+
+        {/* Premium Status Section - For Testing */}
+        <View style={styles.section}>
+          <TouchableOpacity
+            style={[styles.sectionHeaderButton, { backgroundColor: currentTheme.cardBackground }]}
+            onPress={() => setPremiumExpanded(!premiumExpanded)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.sectionHeaderLeft}>
+              <Text style={[styles.sectionTitle, { color: currentTheme.textPrimary }]}>
+                👑 Premium Status
+              </Text>
+              <View style={[styles.badge, { backgroundColor: isPremium ? '#22C55E' : '#F59E0B' }]}>
+                <Text style={styles.badgeText}>{isPremium ? 'Active' : 'Free'}</Text>
+              </View>
+            </View>
+            <Text style={[styles.expandIcon, { color: currentTheme.textPrimary }]}>
+              {premiumExpanded ? '▼' : '▶'}
+            </Text>
+          </TouchableOpacity>
+
+          {premiumExpanded && (
+            <View style={styles.sectionContent}>
+              <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>
+                Premium features include tagging, filtering, and exporting journal entries
+              </Text>
+
+              <TouchableOpacity
+                style={[
+                  styles.premiumToggle,
+                  { 
+                    backgroundColor: isPremium ? '#22C55E' : currentTheme.cardBackground,
+                    borderColor: isPremium ? '#22C55E' : currentTheme.accent,
+                    borderWidth: 2
+                  }
+                ]}
+                onPress={() => setPremium(!isPremium)}
+              >
+                <Text style={[
+                  styles.premiumToggleText,
+                  { color: isPremium ? '#FFFFFF' : currentTheme.textPrimary }
+                ]}>
+                  {isPremium ? '✓ Premium Active' : 'Toggle Premium (Test Mode)'}
+                </Text>
+              </TouchableOpacity>
+
+              {isPremium && (
+                <View style={[styles.premiumFeatures, { backgroundColor: currentTheme.colors[1] }]}>
+                  <Text style={[styles.premiumFeaturesTitle, { color: currentTheme.textPrimary }]}>
+                    Premium Features Unlocked:
+                  </Text>
+                  <Text style={[styles.premiumFeature, { color: currentTheme.textSecondary }]}>
+                    ✓ Tag journal entries
+                  </Text>
+                  <Text style={[styles.premiumFeature, { color: currentTheme.textSecondary }]}>
+                    ✓ Filter by tags
+                  </Text>
+                  <Text style={[styles.premiumFeature, { color: currentTheme.textSecondary }]}>
+                    ✓ Export to PDF/Spreadsheet
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+        </View>
 
         {/* Theme Section - Collapsible */}
         <View style={styles.section}>
@@ -310,6 +378,7 @@ const styles = StyleSheet.create({
   sectionSubtitle: {
     fontSize: 14,
     flex: 1,
+    marginBottom: 12,
   },
   addButton: {
     paddingHorizontal: 16,
@@ -320,6 +389,31 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: 'bold',
     fontSize: 14,
+  },
+  premiumToggle: {
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  premiumToggleText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  premiumFeatures: {
+    padding: 16,
+    borderRadius: 12,
+  },
+  premiumFeaturesTitle: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  premiumFeature: {
+    fontSize: 14,
+    marginBottom: 6,
+    paddingLeft: 8,
   },
   emptyCard: {
     padding: 20,
