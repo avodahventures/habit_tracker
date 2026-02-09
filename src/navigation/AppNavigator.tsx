@@ -6,24 +6,27 @@ import { HabitTrackerScreen } from '../screens/HabitTrackerScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
 import { JournalScreen } from '../screens/JournalScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
+import { useTheme } from '../context/ThemeContext';
 
 const Tab = createBottomTabNavigator();
 
 export function AppNavigator() {
+  const { currentTheme } = useTheme();
+
   return (
     <NavigationContainer>
       <Tab.Navigator
         screenOptions={{
           headerShown: false,
           tabBarStyle: {
-            backgroundColor: '#1E3A5F',
-            borderTopColor: '#3D5A7F',
+            backgroundColor: currentTheme.colors[1], // Use theme background
+            borderTopColor: currentTheme.cardBorder, // Use theme border
             paddingBottom: 5,
             paddingTop: 5,
             height: 60,
           },
-          tabBarActiveTintColor: '#60A5FA',
-          tabBarInactiveTintColor: '#94A3B8',
+          tabBarActiveTintColor: currentTheme.accent, // Use theme accent
+          tabBarInactiveTintColor: currentTheme.textSecondary, // Use theme text
           tabBarLabelStyle: {
             fontSize: 12,
             fontWeight: '600',
