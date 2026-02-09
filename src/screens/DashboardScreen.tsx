@@ -1,124 +1,161 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTheme } from '../context/ThemeContext';
+import { usePremium } from '../context/PremiumContext';
 import { useFocusEffect } from '@react-navigation/native';
 import { db, Habit } from '../database/database';
-import { useTheme } from '../context/ThemeContext';
+import { PremiumModal } from '../components/PremiumModal';
 
-interface HabitWithStats extends Habit {
-  streak: number;
-  totalCompleted: number;
-  completedToday: boolean;
-}
+const { width } = Dimensions.get('window');
 
-interface Stats {
-  total: number;
-  completed: number;
-  percentage: number;
-}
+type ViewType = '7days' | '30days' | '12months';
 
 interface WeekData {
   habitId: number;
   habitName: string;
-  days: boolean[]; // Sun, Mon, Tue, Wed, Thu, Fri, Sat
+  days: boolean[];
 }
 
-type TimeFrame = '7days' | '30days' | '12months';
-
-// MonthCompletionCell Component
-function MonthCompletionCell({ 
-  habitId, 
-  startDate, 
-  endDate, 
-  currentTheme 
-}: { 
-  habitId: number; 
-  startDate: Date; 
-  endDate: Date; 
-  currentTheme: any;
-}) {
-  const [completionData, setCompletionData] = useState<{ completed: number; total: number } | null>(null);
-
-  useEffect(() => {
-    loadCompletionData();
-  }, [habitId, startDate, endDate]);
-
-  const loadCompletionData = async () => {
-    const startStr = startDate.toISOString().split('T')[0];
-    const endStr = endDate.toISOString().split('T')[0];
-    
-    const logs = await db.getHabitLogs(habitId, startStr, endStr);
-    const completed = logs.filter(l => l.completed).length;
-    const totalDays = Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-    
-    setCompletionData({ completed, total: totalDays });
-  };
-
-  if (!completionData) {
-    return (
-      <View style={styles.yearGridCell}>
-        <View style={[styles.yearCompletionBox, { borderColor: currentTheme.cardBorder }]}>
-          <Text style={[styles.yearCompletionText, { color: currentTheme.textSecondary }]}>-</Text>
-        </View>
-      </View>
-    );
-  }
-
-  const percentage = completionData.total > 0 
-    ? Math.round((completionData.completed / completionData.total) * 100) 
-    : 0;
-
-  // Color coding based on percentage
-  let backgroundColor = 'transparent';
-  let textColor = currentTheme.textPrimary;
-  
-  if (percentage >= 75) {
-    // 75-100%: Dark Green
-    backgroundColor = '#22C55E';
-    textColor = '#FFFFFF';
-  } else if (percentage >= 50) {
-    // 50-74%: Yellowish Green
-    backgroundColor = '#BEF264';
-    textColor = '#3F6212';
-  } else if (percentage > 0) {
-    // 1-49%: Orange
-    backgroundColor = '#FB923C';
-    textColor = '#FFFFFF';
-  }
-
-  return (
-    <View style={styles.yearMonthCell}>
-      <View 
-        style={[
-          styles.yearCompletionBox,
-          { 
-            borderColor: currentTheme.cardBorder,
-            backgroundColor 
-          }
-        ]}
-      >
-        <Text style={[styles.yearCompletionText, { color: textColor }]}>
-          {percentage}%
-        </Text>
-      </View>
-    </View>
-  );
+interface MonthCompletionCellProps {
+  habitId: number;
+  year: number;
+  month: number;
 }
 
 export function DashboardScreen() {
   const { currentTheme } = useTheme();
-  const [habits, setHabits] = useState<HabitWithStats[]>([]);
+  const { isPremium } = usePremium();
+  const [selectedView, setSelectedView] = useState<ViewType>('7days');
+  const [habits, setHabits] = useState<Habit[]>([]);
   const [weekData, setWeekData] = useState<WeekData[]>([]);
-  const [todayStats, setTodayStats] = useState<Stats>({ total: 0, completed: 0, percentage: 0 });
-  const [timeFrame, setTimeFrame] = useState<TimeFrame>('7days');
   const [selectedWeekStart, setSelectedWeekStart] = useState<Date>(getLastSunday(new Date()));
   const [selectedMonth, setSelectedMonth] = useState<Date>(new Date());
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [monthData, setMonthData] = useState<Map<number, boolean[]>>(new Map());
-  const [loading, setLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
+  const [premiumModalVisible, setPremiumModalVisible] = useState(false);
+  const [premiumFeature, setPremiumFeature] = useState('');
 
-  // Helper function to get last Sunday
+  useFocusEffect(
+    React.useCallback(() => {
+      loadHabits();
+    }, [])
+  );
+
+  useEffect(() => {
+    if (selectedView === '7days') {
+      loadWeekData();
+    } else if (selectedView === '30days') {
+      loadMonthData();
+    }
+  }, [habits, selectedWeekStart, selectedMonth, selectedView]);
+
+  const loadHabits = async () => {
+    try {
+      const data = await db.getHabits();
+      setHabits(data);
+    } catch (error) {
+      console.error('Error loading habits:', error);
+    }
+  };
+
+  const loadWeekData = async () => {
+    try {
+      const weekStart = new Date(selectedWeekStart);
+      const data: WeekData[] = [];
+
+      for (const habit of habits) {
+        const days: boolean[] = [];
+        for (let i = 0; i < 7; i++) {
+          const date = new Date(weekStart);
+          date.setDate(weekStart.getDate() + i);
+          const dateStr = date.toISOString().split('T')[0];
+          
+          const logs = await db.getHabitLogs(habit.id, dateStr, dateStr);
+          const completed = logs.length > 0 && logs[0].completed === 1;
+          days.push(completed);
+        }
+        data.push({
+          habitId: habit.id,
+          habitName: habit.name,
+          days,
+        });
+      }
+
+      setWeekData(data);
+    } catch (error) {
+      console.error('Error loading week data:', error);
+    }
+  };
+
+  const loadMonthData = async () => {
+    try {
+      const monthDataMap = new Map<number, boolean[]>();
+      const firstDay = getFirstDayOfMonth(selectedMonth);
+      const lastDay = getLastDayOfMonth(selectedMonth);
+      const daysInMonth = getDaysInMonth(selectedMonth);
+
+      for (const habit of habits) {
+        const days: boolean[] = new Array(daysInMonth).fill(false);
+        const startStr = firstDay.toISOString().split('T')[0];
+        const endStr = lastDay.toISOString().split('T')[0];
+        
+        const logs = await db.getHabitLogs(habit.id, startStr, endStr);
+        
+        logs.forEach(log => {
+          const logDate = new Date(log.date + 'T00:00:00');
+          const dayIndex = logDate.getDate() - 1;
+          if (dayIndex >= 0 && dayIndex < daysInMonth) {
+            days[dayIndex] = log.completed === 1;
+          }
+        });
+
+        monthDataMap.set(habit.id, days);
+      }
+
+      setMonthData(monthDataMap);
+    } catch (error) {
+      console.error('Error loading month data:', error);
+    }
+  };
+
+  const handleViewChange = (view: ViewType) => {
+    if ((view === '30days' || view === '12months') && !isPremium) {
+      setPremiumFeature(view === '30days' ? '30 Days View' : '12 Months View');
+      setPremiumModalVisible(true);
+      return;
+    }
+    setSelectedView(view);
+  };
+
+  const navigateWeek = (direction: 'prev' | 'next' | 'today') => {
+    if (direction === 'today') {
+      setSelectedWeekStart(getLastSunday(new Date()));
+    } else {
+      const newWeekStart = new Date(selectedWeekStart);
+      newWeekStart.setDate(selectedWeekStart.getDate() + (direction === 'next' ? 7 : -7));
+      setSelectedWeekStart(newWeekStart);
+    }
+  };
+
+  const navigateMonth = (direction: 'prev' | 'next' | 'today') => {
+    if (direction === 'today') {
+      setSelectedMonth(new Date());
+    } else {
+      const newMonth = new Date(selectedMonth);
+      newMonth.setMonth(selectedMonth.getMonth() + (direction === 'next' ? 1 : -1));
+      setSelectedMonth(newMonth);
+    }
+  };
+
+  const navigateYear = (direction: 'prev' | 'next' | 'today') => {
+    if (direction === 'today') {
+      setSelectedYear(new Date().getFullYear());
+    } else {
+      setSelectedYear(selectedYear + (direction === 'next' ? 1 : -1));
+    }
+  };
+
   function getLastSunday(date: Date): Date {
     const d = new Date(date);
     const day = d.getDay();
@@ -126,708 +163,414 @@ export function DashboardScreen() {
     return new Date(d.setDate(diff));
   }
 
-  // Helper function to format date
-  function formatDate(date: Date, format: 'short' | 'full' = 'short'): string {
-    if (format === 'short') {
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    }
-    return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-  }
-
-  // Helper function to check if two dates are the same week
-  function isSameWeek(date1: Date, date2: Date): boolean {
-    const sunday1 = getLastSunday(date1);
-    const sunday2 = getLastSunday(date2);
-    return sunday1.toDateString() === sunday2.toDateString();
-  }
-
-  // Helper function to get first day of month
   function getFirstDayOfMonth(date: Date): Date {
     return new Date(date.getFullYear(), date.getMonth(), 1);
   }
 
-  // Helper function to get last day of month
   function getLastDayOfMonth(date: Date): Date {
     return new Date(date.getFullYear(), date.getMonth() + 1, 0);
   }
 
-  // Helper function to get days in month
   function getDaysInMonth(date: Date): number {
     return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
   }
 
-  // Helper function to get month name
   function getMonthName(date: Date): string {
     return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   }
 
-  const loadAnalytics = async () => {
-    try {
-      setLoading(true);
-      const allHabits = await db.getHabits();
-      const logs = await db.getTodayLogs();
-
-      const logsMap: Record<number, number> = {};
-      logs.forEach(log => {
-        logsMap[log.habitId] = log.completed;
-      });
-
-      const habitsWithStats = await Promise.all(
-        allHabits.map(async (habit) => {
-          const stats = await db.getHabitStats(habit.id);
-          return {
-            ...habit,
-            streak: stats.currentStreak,
-            totalCompleted: stats.totalCompleted,
-            completedToday: logsMap[habit.id] === 1,
-          };
-        })
-      );
-
-      setHabits(habitsWithStats);
-
-      const total = habitsWithStats.length;
-      const completed = habitsWithStats.filter(h => h.completedToday).length;
-      const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
-      
-      setTodayStats({ total, completed, percentage });
-
-      // Load week data for grid view
-      await loadWeekData(habitsWithStats, selectedWeekStart);
-      
-      // Load month data for calendar view
-      await loadMonthData(habitsWithStats, selectedMonth);
-    } catch (error) {
-      console.error('Error loading analytics:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadWeekData = async (habits: HabitWithStats[], weekStart: Date) => {
-    const weekDataArray: WeekData[] = [];
-
-    for (const habit of habits) {
-      const days = [false, false, false, false, false, false, false];
-
-      for (let i = 0; i < 7; i++) {
-        const date = new Date(weekStart);
-        date.setDate(weekStart.getDate() + i);
-        const dateStr = date.toISOString().split('T')[0];
-
-        const logs = await db.getHabitLogs(habit.id, dateStr, dateStr);
-        if (logs.length > 0 && logs[0].completed) {
-          days[i] = true;
-        }
-      }
-
-      weekDataArray.push({
-        habitId: habit.id,
-        habitName: habit.name,
-        days,
-      });
-    }
-
-    setWeekData(weekDataArray);
-  };
-
-  const loadMonthData = async (habits: HabitWithStats[], monthDate: Date) => {
-    const monthDataMap = new Map<number, boolean[]>();
-    const daysInMonth = getDaysInMonth(monthDate);
-    const firstDay = getFirstDayOfMonth(monthDate);
-
-    for (const habit of habits) {
-      const days = new Array(daysInMonth).fill(false);
-
-      for (let i = 0; i < daysInMonth; i++) {
-        const date = new Date(firstDay);
-        date.setDate(i + 1);
-        const dateStr = date.toISOString().split('T')[0];
-
-        const logs = await db.getHabitLogs(habit.id, dateStr, dateStr);
-        if (logs.length > 0 && logs[0].completed) {
-          days[i] = true;
-        }
-      }
-
-      monthDataMap.set(habit.id, days);
-    }
-
-    setMonthData(monthDataMap);
-  };
-
-  useFocusEffect(
-    useCallback(() => {
-      loadAnalytics();
-    }, [selectedWeekStart, selectedMonth])
-  );
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await loadAnalytics();
-    setRefreshing(false);
-  };
-
-  const changeWeek = (direction: 'prev' | 'next') => {
-    const newWeekStart = new Date(selectedWeekStart);
-    if (direction === 'prev') {
-      newWeekStart.setDate(selectedWeekStart.getDate() - 7);
-    } else {
-      newWeekStart.setDate(selectedWeekStart.getDate() + 7);
-    }
-    setSelectedWeekStart(newWeekStart);
-  };
-
-  const goToCurrentWeek = () => {
-    setSelectedWeekStart(getLastSunday(new Date()));
-  };
-
-  const changeMonth = (direction: 'prev' | 'next') => {
-    const newMonth = new Date(selectedMonth);
-    if (direction === 'prev') {
-      newMonth.setMonth(selectedMonth.getMonth() - 1);
-    } else {
-      newMonth.setMonth(selectedMonth.getMonth() + 1);
-    }
-    setSelectedMonth(newMonth);
-  };
-
-  const goToCurrentMonth = () => {
-    setSelectedMonth(new Date());
-  };
-
-  const changeYear = (direction: 'prev' | 'next') => {
-    if (direction === 'prev') {
-      setSelectedYear(selectedYear - 1);
-    } else {
-      setSelectedYear(selectedYear + 1);
-    }
-  };
-
-  const goToCurrentYear = () => {
-    setSelectedYear(new Date().getFullYear());
-  };
-
-  const renderWeekSelector = () => {
-    const weekEnd = new Date(selectedWeekStart);
-    weekEnd.setDate(selectedWeekStart.getDate() + 6);
-    const isCurrentWeek = isSameWeek(selectedWeekStart, new Date());
-
-    return (
-      <View style={styles.weekSelectorContainer}>
-        <TouchableOpacity
-          style={[styles.weekButton, { backgroundColor: currentTheme.cardBackground }]}
-          onPress={() => changeWeek('prev')}
-        >
-          <Text style={[styles.weekButtonText, { color: currentTheme.textPrimary }]}>←</Text>
-        </TouchableOpacity>
-
-        <View style={[styles.weekDisplay, { backgroundColor: currentTheme.cardBackground }]}>
-          <Text style={[styles.weekText, { color: currentTheme.textPrimary }]}>
-            {formatDate(selectedWeekStart)} - {formatDate(weekEnd)}
-          </Text>
-          {!isCurrentWeek && (
-            <TouchableOpacity onPress={goToCurrentWeek}>
-              <Text style={[styles.todayButton, { color: currentTheme.accent }]}>
-                Today
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        <TouchableOpacity
-          style={[styles.weekButton, { backgroundColor: currentTheme.cardBackground }]}
-          onPress={() => changeWeek('next')}
-        >
-          <Text style={[styles.weekButtonText, { color: currentTheme.textPrimary }]}>→</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  };
-
-  const renderWeekGrid = () => {
-    if (habits.length === 0) {
-      return (
-        <View style={[styles.emptyState, { backgroundColor: currentTheme.cardBackground }]}>
-          <Text style={[styles.emptyText, { color: currentTheme.textSecondary }]}>
-            No habits to track yet.{'\n'}Add some habits in Settings to get started!
-          </Text>
-        </View>
-      );
-    }
-
-    const dayLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-    const dayDates = Array.from({ length: 7 }, (_, i) => {
-      const date = new Date(selectedWeekStart);
-      date.setDate(selectedWeekStart.getDate() + i);
-      return date.getDate();
-    });
-
-    return (
-      <View style={styles.gridContainer}>
-        {/* Header Row */}
-        <View style={styles.gridRow}>
-          <View style={[styles.gridCell, styles.headerCell, styles.habitNameCell]}>
-            <Text style={[styles.headerText, { color: currentTheme.textPrimary }]}>
-              Habit
-            </Text>
-          </View>
-          {dayLabels.map((day, index) => {
-            const date = new Date(selectedWeekStart);
-            date.setDate(selectedWeekStart.getDate() + index);
-            const isToday = date.toDateString() === new Date().toDateString();
-
-            return (
-              <View key={index} style={[styles.gridCell, styles.headerCell, styles.dayCell]}>
-                <Text style={[styles.headerText, { color: currentTheme.textPrimary }]}>
-                  {day}
-                </Text>
-                <Text 
-                  style={[
-                    styles.dateText, 
-                    { color: currentTheme.textSecondary },
-                    isToday && { 
-                      color: currentTheme.accent, 
-                      fontWeight: 'bold',
-                      backgroundColor: currentTheme.cardBackground,
-                      borderRadius: 10,
-                      paddingHorizontal: 6,
-                      paddingVertical: 2,
-                    }
-                  ]}
-                >
-                  {dayDates[index]}
-                </Text>
-              </View>
-            );
-          })}
-        </View>
-
-        {/* Data Rows */}
-        {weekData.map((habit, habitIndex) => (
-          <View 
-            key={habit.habitId} 
-            style={[
-              styles.gridRow,
-              habitIndex % 2 === 0 && { backgroundColor: currentTheme.cardBackground }
-            ]}
-          >
-            <View style={[styles.gridCell, styles.habitNameCell]}>
-              <Text 
-                style={[styles.habitText, { color: currentTheme.textPrimary }]}
-                numberOfLines={2}
-              >
-                {habit.habitName}
-              </Text>
-            </View>
-            {habit.days.map((completed, dayIndex) => (
-              <View key={dayIndex} style={[styles.gridCell, styles.dayCell]}>
-                <View style={[
-                  styles.checkbox,
-                  { borderColor: currentTheme.accent },
-                  completed && { backgroundColor: currentTheme.accent }
-                ]}>
-                  {completed && (
-                    <Text style={styles.checkmark}>✓</Text>
-                  )}
-                </View>
-              </View>
-            ))}
-          </View>
-        ))}
-      </View>
-    );
-  };
-
-  const render30DaysView = () => {
-    if (habits.length === 0) {
-      return (
-        <View style={[styles.emptyState, { backgroundColor: currentTheme.cardBackground }]}>
-          <Text style={[styles.emptyText, { color: currentTheme.textSecondary }]}>
-            No habits to track yet.{'\n'}Add some habits in Settings to get started!
-          </Text>
-        </View>
-      );
-    }
-
-    const daysInMonth = getDaysInMonth(selectedMonth);
-    const firstDay = getFirstDayOfMonth(selectedMonth);
-    const startingDayOfWeek = firstDay.getDay(); // 0 = Sunday
-    const isCurrentMonth = selectedMonth.getMonth() === new Date().getMonth() && 
-                          selectedMonth.getFullYear() === new Date().getFullYear();
-
-    // Create array of day numbers
-    const calendarDays = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+  function formatDateRange(weekStart: Date): string {
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
     
-    // Add empty cells for days before month starts
-    const leadingEmptyCells = Array.from({ length: startingDayOfWeek }, () => null);
-    const fullCalendar = [...leadingEmptyCells, ...calendarDays];
-
-    return (
-      <View>
-        {/* Month Selector */}
-        <View style={styles.monthSelectorContainer}>
-          <TouchableOpacity
-            style={[styles.monthButton, { backgroundColor: currentTheme.cardBackground }]}
-            onPress={() => changeMonth('prev')}
-          >
-            <Text style={[styles.monthButtonText, { color: currentTheme.textPrimary }]}>←</Text>
-          </TouchableOpacity>
-
-          <View style={[styles.monthDisplay, { backgroundColor: currentTheme.cardBackground }]}>
-            <Text style={[styles.monthText, { color: currentTheme.textPrimary }]}>
-              {getMonthName(selectedMonth)}
-            </Text>
-            {!isCurrentMonth && (
-              <TouchableOpacity onPress={goToCurrentMonth}>
-                <Text style={[styles.todayButton, { color: currentTheme.accent }]}>
-                  This Month
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          <TouchableOpacity
-            style={[styles.monthButton, { backgroundColor: currentTheme.cardBackground }]}
-            onPress={() => changeMonth('next')}
-          >
-            <Text style={[styles.monthButtonText, { color: currentTheme.textPrimary }]}>→</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Calendar Grid for Each Habit */}
-        {habits.map((habit, habitIndex) => {
-          const habitDays = monthData.get(habit.id) || [];
-          const completedCount = habitDays.filter(Boolean).length;
-          const completionRate = daysInMonth > 0 ? Math.round((completedCount / daysInMonth) * 100) : 0;
-
-          return (
-            <View 
-              key={habit.id} 
-              style={[
-                styles.habitCalendarCard, 
-                { backgroundColor: currentTheme.cardBackground }
-              ]}
-            >
-              {/* Habit Header */}
-              <View style={styles.habitCalendarHeader}>
-                <Text style={[styles.habitCalendarTitle, { color: currentTheme.textPrimary }]}>
-                  {habit.name}
-                </Text>
-                <View style={styles.habitStats}>
-                  <Text style={[styles.habitStatsText, { color: currentTheme.accent }]}>
-                    {completedCount}/{daysInMonth} days
-                  </Text>
-                  <Text style={[styles.habitStatsText, { color: currentTheme.textSecondary }]}>
-                    {completionRate}%
-                  </Text>
-                </View>
-              </View>
-
-              {/* Day Labels */}
-              <View style={styles.calendarDayLabels}>
-                {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => (
-                  <View key={index} style={styles.calendarDayLabelCell}>
-                    <Text style={[styles.calendarDayLabel, { color: currentTheme.textSecondary }]}>
-                      {day}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-
-              {/* Calendar Grid */}
-              <View style={styles.calendarGrid}>
-                {fullCalendar.map((day, index) => {
-                  if (day === null) {
-                    return <View key={`empty-${index}`} style={styles.calendarCell} />;
-                  }
-
-                  const isCompleted = habitDays[day - 1];
-                  const cellDate = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), day);
-                  const isToday = cellDate.toDateString() === new Date().toDateString();
-                  const isFuture = cellDate > new Date();
-
-                  return (
-                    <View key={day} style={styles.calendarCell}>
-                      <View 
-                        style={[
-                          styles.calendarDay,
-                          { borderColor: currentTheme.cardBorder },
-                          isCompleted && { 
-                            backgroundColor: currentTheme.accent,
-                            borderColor: currentTheme.accent 
-                          },
-                          isToday && !isCompleted && { 
-                            borderColor: currentTheme.accent,
-                            borderWidth: 2 
-                          },
-                          isFuture && { opacity: 0.3 }
-                        ]}
-                      >
-                        <Text 
-                          style={[
-                            styles.calendarDayText,
-                            { color: currentTheme.textPrimary },
-                            isCompleted && { color: '#FFFFFF', fontWeight: 'bold' }
-                          ]}
-                        >
-                          {day}
-                        </Text>
-                      </View>
-                    </View>
-                  );
-                })}
-              </View>
-            </View>
-          );
-        })}
-      </View>
-    );
-  };
-
-  const render12MonthsView = () => {
-    if (habits.length === 0) {
-      return (
-        <View style={[styles.emptyState, { backgroundColor: currentTheme.cardBackground }]}>
-          <Text style={[styles.emptyText, { color: currentTheme.textSecondary }]}>
-            No habits to track yet.{'\n'}Add some habits in Settings to get started!
-          </Text>
-        </View>
-      );
-    }
-
-    // Generate 12 months for the selected year (Jan to Dec)
-    const months: Date[] = [];
-    const monthLabels: string[] = [];
+    const startMonth = weekStart.toLocaleDateString('en-US', { month: 'short' });
+    const endMonth = weekEnd.toLocaleDateString('en-US', { month: 'short' });
+    const startDay = weekStart.getDate();
+    const endDay = weekEnd.getDate();
     
-    for (let i = 0; i < 12; i++) {
-      const date = new Date(selectedYear, i, 1);
-      months.push(date);
-      monthLabels.push(date.toLocaleDateString('en-US', { month: 'short' }));
+    if (startMonth === endMonth) {
+      return `${startMonth} ${startDay} - ${endDay}`;
+    } else {
+      return `${startMonth} ${startDay} - ${endMonth} ${endDay}`;
     }
+  }
 
-    const isCurrentYear = selectedYear === new Date().getFullYear();
+  const MonthCompletionCell: React.FC<MonthCompletionCellProps> = ({ habitId, year, month }) => {
+    const [percentage, setPercentage] = useState<number | null>(null);
+
+    useEffect(() => {
+      loadMonthCompletion();
+    }, [habitId, year, month]);
+
+    const loadMonthCompletion = async () => {
+      try {
+        const firstDay = new Date(year, month, 1);
+        const lastDay = new Date(year, month + 1, 0);
+        const daysInMonth = lastDay.getDate();
+
+        const startStr = firstDay.toISOString().split('T')[0];
+        const endStr = lastDay.toISOString().split('T')[0];
+
+        const logs = await db.getHabitLogs(habitId, startStr, endStr);
+        const completedDays = logs.filter(log => log.completed === 1).length;
+        const pct = daysInMonth > 0 ? Math.round((completedDays / daysInMonth) * 100) : 0;
+        setPercentage(pct);
+      } catch (error) {
+        console.error('Error loading month completion:', error);
+        setPercentage(0);
+      }
+    };
+
+    const getBackgroundColor = () => {
+      if (percentage === null) return 'transparent';
+      if (percentage >= 75) return '#22C55E';
+      if (percentage >= 50) return '#BEF264';
+      if (percentage >= 1) return '#FB923C';
+      return 'transparent';
+    };
+
+    const getTextColor = () => {
+      if (percentage === null) return currentTheme.textSecondary;
+      if (percentage >= 75) return '#FFFFFF';
+      if (percentage >= 50) return '#3F6212';
+      if (percentage >= 1) return '#FFFFFF';
+      return currentTheme.textSecondary;
+    };
 
     return (
-      <View>
-        {/* Year Selector */}
-        <View style={styles.yearSelectorContainer}>
-          <TouchableOpacity
-            style={[styles.yearButton, { backgroundColor: currentTheme.cardBackground }]}
-            onPress={() => changeYear('prev')}
-          >
-            <Text style={[styles.yearButtonText, { color: currentTheme.textPrimary }]}>←</Text>
-          </TouchableOpacity>
-
-          <View style={[styles.yearDisplay, { backgroundColor: currentTheme.cardBackground }]}>
-            <Text style={[styles.yearText, { color: currentTheme.textPrimary }]}>
-              {selectedYear}
-            </Text>
-            {!isCurrentYear && (
-              <TouchableOpacity onPress={goToCurrentYear}>
-                <Text style={[styles.todayButton, { color: currentTheme.accent }]}>
-                  This Year
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          <TouchableOpacity
-            style={[styles.yearButton, { backgroundColor: currentTheme.cardBackground }]}
-            onPress={() => changeYear('next')}
-          >
-            <Text style={[styles.yearButtonText, { color: currentTheme.textPrimary }]}>→</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* 12 Months Grid */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={true}>
-          <View style={styles.yearGridContainer}>
-            {/* Header Row */}
-            <View style={styles.yearGridRow}>
-              <View style={[styles.yearGridCell, styles.yearHeaderCell, styles.yearHabitNameCell]}>
-                <Text style={[styles.headerText, { color: currentTheme.textPrimary }]}>
-                  Habit
-                </Text>
-              </View>
-              {monthLabels.map((month, index) => (
-                <View key={index} style={[styles.yearGridCell, styles.yearHeaderCell, styles.yearMonthCell]}>
-                  <Text style={[styles.yearHeaderText, { color: currentTheme.textPrimary }]}>
-                    {month}
-                  </Text>
-                </View>
-              ))}
-            </View>
-
-            {/* Habit Rows */}
-            {habits.map((habit, habitIndex) => (
-              <View 
-                key={habit.id} 
-                style={[
-                  styles.yearGridRow,
-                  habitIndex % 2 === 0 && { backgroundColor: currentTheme.cardBackground }
-                ]}
-              >
-                <View style={[styles.yearGridCell, styles.yearHabitNameCell]}>
-                  <Text 
-                    style={[styles.habitText, { color: currentTheme.textPrimary }]}
-                    numberOfLines={2}
-                  >
-                    {habit.name}
-                  </Text>
-                </View>
-                {months.map((monthDate, monthIndex) => {
-                  const startDate = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
-                  const endDate = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0);
-                  
-                  return (
-                    <MonthCompletionCell
-                      key={monthIndex}
-                      habitId={habit.id}
-                      startDate={startDate}
-                      endDate={endDate}
-                      currentTheme={currentTheme}
-                    />
-                  );
-                })}
-              </View>
-            ))}
-          </View>
-        </ScrollView>
+      <View
+        style={[
+          styles.yearCompletionBox,
+          {
+            backgroundColor: getBackgroundColor(),
+            borderColor: percentage === 0 ? currentTheme.cardBorder : 'transparent',
+            borderWidth: percentage === 0 ? 1 : 0,
+          },
+        ]}
+      >
+        <Text style={[styles.yearCompletionText, { color: getTextColor() }]}>
+          {percentage === null ? '-' : `${percentage}%`}
+        </Text>
       </View>
     );
   };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: currentTheme.colors[0] }]}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl 
-            refreshing={refreshing} 
-            onRefresh={onRefresh}
-            tintColor={currentTheme.accent}
-          />
-        }
-      >
-        <View style={styles.header}>
-          <Text style={[styles.greeting, { color: currentTheme.textPrimary }]}>
-            Dashboard 📊
-          </Text>
-          <Text style={[styles.subtitle, { color: currentTheme.textSecondary }]}>
-            Track your spiritual progress
-          </Text>
-        </View>
+      <View style={styles.header}>
+        <Text style={[styles.title, { color: currentTheme.textPrimary }]}>Dashboard</Text>
+        <Text style={[styles.subtitle, { color: currentTheme.textSecondary }]}>
+          Track your spiritual progress
+        </Text>
+      </View>
 
-        {/* Overall Summary */}
-        <View style={[styles.summaryCard, { backgroundColor: currentTheme.cardBackground }]}>
-          <Text style={[styles.summaryTitle, { color: currentTheme.textPrimary }]}>
-            Today's Overview
+      {/* View Selector */}
+      <View style={styles.viewSelector}>
+        <TouchableOpacity
+          style={[
+            styles.viewButton,
+            { backgroundColor: currentTheme.cardBackground },
+            selectedView === '7days' && { backgroundColor: currentTheme.accent },
+          ]}
+          onPress={() => handleViewChange('7days')}
+        >
+          <Text
+            style={[
+              styles.viewButtonText,
+              { color: currentTheme.textPrimary },
+              selectedView === '7days' && { color: '#FFFFFF', fontWeight: 'bold' },
+            ]}
+          >
+            7 Days
           </Text>
-          <View style={styles.summaryStats}>
-            <View style={styles.summaryItem}>
-              <Text style={[styles.summaryNumber, { color: currentTheme.accent }]}>
-                {todayStats.completed}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.viewButton,
+            { backgroundColor: currentTheme.cardBackground },
+            selectedView === '30days' && { backgroundColor: currentTheme.accent },
+            !isPremium && { opacity: 0.6 },
+          ]}
+          onPress={() => handleViewChange('30days')}
+        >
+          <Text
+            style={[
+              styles.viewButtonText,
+              { color: currentTheme.textPrimary },
+              selectedView === '30days' && { color: '#FFFFFF', fontWeight: 'bold' },
+            ]}
+          >
+            30 Days {!isPremium && '👑'}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.viewButton,
+            { backgroundColor: currentTheme.cardBackground },
+            selectedView === '12months' && { backgroundColor: currentTheme.accent },
+            !isPremium && { opacity: 0.6 },
+          ]}
+          onPress={() => handleViewChange('12months')}
+        >
+          <Text
+            style={[
+              styles.viewButtonText,
+              { color: currentTheme.textPrimary },
+              selectedView === '12months' && { color: '#FFFFFF', fontWeight: 'bold' },
+            ]}
+          >
+            12 Months {!isPremium && '👑'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView style={styles.content}>
+        {/* 7 DAYS VIEW - FREE */}
+        {selectedView === '7days' && (
+          <View style={[styles.card, { backgroundColor: currentTheme.cardBackground }]}>
+            <View style={styles.cardHeader}>
+              <Text style={[styles.cardTitle, { color: currentTheme.textPrimary }]}>
+                Weekly Progress
               </Text>
-              <Text style={[styles.summaryLabel, { color: currentTheme.textSecondary }]}>
-                Completed
-              </Text>
+              <View style={styles.weekNavigation}>
+                <TouchableOpacity onPress={() => navigateWeek('prev')} style={styles.navButton}>
+                  <Text style={[styles.navButtonText, { color: currentTheme.accent }]}>◀</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => navigateWeek('today')} style={styles.todayButton}>
+                  <Text style={[styles.todayButtonText, { color: currentTheme.textPrimary }]}>
+                    {formatDateRange(selectedWeekStart)}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => navigateWeek('next')} style={styles.navButton}>
+                  <Text style={[styles.navButtonText, { color: currentTheme.accent }]}>▶</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-            <View style={styles.summaryItem}>
-              <Text style={[styles.summaryNumber, { color: currentTheme.accent }]}>
-                {todayStats.total}
+
+            {habits.length === 0 ? (
+              <Text style={[styles.emptyText, { color: currentTheme.textSecondary }]}>
+                No habits yet. Add some in Settings!
               </Text>
-              <Text style={[styles.summaryLabel, { color: currentTheme.textSecondary }]}>
-                Total Habits
-              </Text>
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View>
+                  {/* Header Row */}
+                  <View style={styles.gridRow}>
+                    <View style={[styles.habitNameCell, styles.headerCell, { backgroundColor: currentTheme.colors[1] }]}>
+                      <Text style={[styles.headerText, { color: currentTheme.textPrimary }]}>Habit</Text>
+                    </View>
+                    {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => {
+                      const date = new Date(selectedWeekStart);
+                      date.setDate(selectedWeekStart.getDate() + index);
+                      const isToday = date.toDateString() === new Date().toDateString();
+                      
+                      return (
+                        <View key={index} style={[styles.dayCell, styles.headerCell, { backgroundColor: currentTheme.colors[1] }]}>
+                          <Text style={[styles.headerText, { color: isToday ? currentTheme.accent : currentTheme.textPrimary }]}>
+                            {day}
+                          </Text>
+                          <Text style={[styles.dateNumber, { color: isToday ? currentTheme.accent : currentTheme.textSecondary }]}>
+                            {date.getDate()}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+
+                  {/* Data Rows */}
+                  {weekData.map((habit, habitIndex) => (
+                    <View
+                      key={habit.habitId}
+                      style={[
+                        styles.gridRow,
+                        habitIndex % 2 === 0 && { backgroundColor: currentTheme.cardBackground },
+                      ]}
+                    >
+                      <View style={styles.habitNameCell}>
+                        <Text style={[styles.habitNameText, { color: currentTheme.textPrimary }]} numberOfLines={1}>
+                          {habit.habitName}
+                        </Text>
+                      </View>
+                      {habit.days.map((completed, dayIndex) => (
+                        <View key={dayIndex} style={styles.dayCell}>
+                          <View
+                            style={[
+                              styles.checkbox,
+                              { borderColor: currentTheme.accent },
+                              completed && { backgroundColor: currentTheme.accent },
+                            ]}
+                          >
+                            {completed && <Text style={styles.checkmark}>✓</Text>}
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  ))}
+                </View>
+              </ScrollView>
+            )}
+          </View>
+        )}
+
+        {/* 30 DAYS VIEW - PREMIUM */}
+        {selectedView === '30days' && isPremium && (
+          <View>
+            <View style={styles.monthNavigation}>
+              <TouchableOpacity onPress={() => navigateMonth('prev')} style={styles.navButton}>
+                <Text style={[styles.navButtonText, { color: currentTheme.accent }]}>◀</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => navigateMonth('today')} style={styles.todayButton}>
+                <Text style={[styles.monthYearText, { color: currentTheme.textPrimary }]}>
+                  {getMonthName(selectedMonth)}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => navigateMonth('next')} style={styles.navButton}>
+                <Text style={[styles.navButtonText, { color: currentTheme.accent }]}>▶</Text>
+              </TouchableOpacity>
             </View>
-            <View style={styles.summaryItem}>
-              <Text style={[styles.summaryNumber, { color: currentTheme.accent }]}>
-                {Math.max(...habits.map(h => h.streak), 0)}
-              </Text>
-              <Text style={[styles.summaryLabel, { color: currentTheme.textSecondary }]}>
-                Best Streak
-              </Text>
+
+            {habits.map((habit) => {
+              const days = monthData.get(habit.id) || [];
+              const completedDays = days.filter(d => d).length;
+              const totalDays = days.length;
+              const percentage = totalDays > 0 ? Math.round((completedDays / totalDays) * 100) : 0;
+
+              const firstDay = getFirstDayOfMonth(selectedMonth);
+              const startDayOfWeek = firstDay.getDay();
+
+              return (
+                <View key={habit.id} style={[styles.monthCard, { backgroundColor: currentTheme.cardBackground }]}>
+                  <View style={styles.monthCardHeader}>
+                    <Text style={[styles.monthHabitName, { color: currentTheme.textPrimary }]}>
+                      {habit.name}
+                    </Text>
+                    <Text style={[styles.monthStats, { color: currentTheme.textSecondary }]}>
+                      {completedDays}/{totalDays} days • {percentage}%
+                    </Text>
+                  </View>
+
+                  <View style={styles.calendarGrid}>
+                    {/* Day labels */}
+                    <View style={styles.calendarWeek}>
+                      {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => (
+                        <View key={index} style={styles.calendarDayLabel}>
+                          <Text style={[styles.calendarDayLabelText, { color: currentTheme.textSecondary }]}>
+                            {day}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+
+                    {/* Calendar days */}
+                    <View style={styles.calendarDays}>
+                      {/* Empty cells before month starts */}
+                      {Array.from({ length: startDayOfWeek }).map((_, index) => (
+                        <View key={`empty-${index}`} style={styles.calendarDay} />
+                      ))}
+
+                      {/* Month days */}
+                      {days.map((completed, dayIndex) => {
+                        const date = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), dayIndex + 1);
+                        const isToday = date.toDateString() === new Date().toDateString();
+                        const isFuture = date > new Date();
+
+                        return (
+                          <View
+                            key={dayIndex}
+                            style={[
+                              styles.calendarDay,
+                              completed && { backgroundColor: currentTheme.accent },
+                              isToday && { borderColor: currentTheme.accent, borderWidth: 2 },
+                              isFuture && { opacity: 0.3 },
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.calendarDayText,
+                                { color: completed ? '#FFFFFF' : currentTheme.textPrimary },
+                              ]}
+                            >
+                              {dayIndex + 1}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
+
+        {/* 12 MONTHS VIEW - PREMIUM */}
+        {selectedView === '12months' && isPremium && (
+          <View>
+            <View style={styles.yearNavigation}>
+              <TouchableOpacity onPress={() => navigateYear('prev')} style={styles.navButton}>
+                <Text style={[styles.navButtonText, { color: currentTheme.accent }]}>◀</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => navigateYear('today')} style={styles.todayButton}>
+                <Text style={[styles.yearText, { color: currentTheme.textPrimary }]}>
+                  {selectedYear}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => navigateYear('next')} style={styles.navButton}>
+                <Text style={[styles.navButtonText, { color: currentTheme.accent }]}>▶</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={[styles.card, { backgroundColor: currentTheme.cardBackground }]}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={true}>
+                <View>
+                  {/* Header Row */}
+                  <View style={styles.yearGridRow}>
+                    <View style={[styles.yearHabitNameCell, styles.headerCell, { backgroundColor: currentTheme.colors[1] }]}>
+                      <Text style={[styles.headerText, { color: currentTheme.textPrimary }]}>Habit</Text>
+                    </View>
+                    {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map((month, index) => (
+                      <View key={index} style={[styles.yearMonthCell, styles.headerCell, { backgroundColor: currentTheme.colors[1] }]}>
+                        <Text style={[styles.headerText, { color: currentTheme.textPrimary }]}>{month}</Text>
+                      </View>
+                    ))}
+                  </View>
+
+                  {/* Data Rows */}
+                  {habits.map((habit, habitIndex) => (
+                    <View
+                      key={habit.id}
+                      style={[
+                        styles.yearGridRow,
+                        habitIndex % 2 === 0 && { backgroundColor: currentTheme.cardBackground },
+                      ]}
+                    >
+                      <View style={styles.yearHabitNameCell}>
+                        <Text style={[styles.habitNameText, { color: currentTheme.textPrimary }]} numberOfLines={1}>
+                          {habit.name}
+                        </Text>
+                      </View>
+                      {Array.from({ length: 12 }).map((_, monthIndex) => (
+                        <View key={monthIndex} style={styles.yearMonthCell}>
+                          <MonthCompletionCell habitId={habit.id} year={selectedYear} month={monthIndex} />
+                        </View>
+                      ))}
+                    </View>
+                  ))}
+                </View>
+              </ScrollView>
             </View>
           </View>
-        </View>
-
-        {/* Habits Progress Section */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: currentTheme.textPrimary }]}>
-            Habits Progress
-          </Text>
-          <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>
-            Total Habits: {habits.length}
-          </Text>
-
-          {/* Tabs */}
-          <View style={styles.tabContainer}>
-            <TouchableOpacity
-              style={[
-                styles.tab,
-                { backgroundColor: currentTheme.cardBackground },
-                timeFrame === '7days' && { backgroundColor: currentTheme.accent },
-              ]}
-              onPress={() => setTimeFrame('7days')}
-            >
-              <Text
-                style={[
-                  styles.tabText,
-                  { color: currentTheme.textSecondary },
-                  timeFrame === '7days' && { color: '#FFFFFF', fontWeight: 'bold' },
-                ]}
-              >
-                7 Days
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.tab,
-                { backgroundColor: currentTheme.cardBackground },
-                timeFrame === '30days' && { backgroundColor: currentTheme.accent },
-              ]}
-              onPress={() => setTimeFrame('30days')}
-            >
-              <Text
-                style={[
-                  styles.tabText,
-                  { color: currentTheme.textSecondary },
-                  timeFrame === '30days' && { color: '#FFFFFF', fontWeight: 'bold' },
-                ]}
-              >
-                30 Days
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.tab,
-                { backgroundColor: currentTheme.cardBackground },
-                timeFrame === '12months' && { backgroundColor: currentTheme.accent },
-              ]}
-              onPress={() => setTimeFrame('12months')}
-            >
-              <Text
-                style={[
-                  styles.tabText,
-                  { color: currentTheme.textSecondary },
-                  timeFrame === '12months' && { color: '#FFFFFF', fontWeight: 'bold' },
-                ]}
-              >
-                12 Months
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Week Selector - Only show for 7 days view */}
-          {timeFrame === '7days' && renderWeekSelector()}
-
-          {/* Render appropriate view */}
-          {timeFrame === '7days' && renderWeekGrid()}
-          {timeFrame === '30days' && render30DaysView()}
-          {timeFrame === '12months' && render12MonthsView()}
-        </View>
+        )}
       </ScrollView>
+
+      {/* Premium Modal */}
+      <PremiumModal
+        visible={premiumModalVisible}
+        onClose={() => setPremiumModalVisible(false)}
+        feature={premiumFeature}
+      />
     </SafeAreaView>
   );
 }
@@ -836,260 +579,128 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 40,
-  },
   header: {
-    marginBottom: 20,
+    padding: 20,
+    paddingBottom: 10,
   },
-  greeting: {
-    fontSize: 28,
+  title: {
+    fontSize: 32,
     fontWeight: 'bold',
     marginBottom: 4,
   },
   subtitle: {
     fontSize: 16,
   },
-  summaryCard: {
-    borderRadius: 16,
-    padding: 20,
+  viewSelector: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    gap: 8,
     marginBottom: 20,
   },
-  summaryTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 16,
-  },
-  summaryStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  summaryItem: {
-    alignItems: 'center',
-  },
-  summaryNumber: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  summaryLabel: {
-    fontSize: 14,
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  sectionSubtitle: {
-    fontSize: 14,
-    marginBottom: 16,
-  },
-  tabContainer: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 16,
-  },
-  tab: {
+  viewButton: {
     flex: 1,
     paddingVertical: 10,
+    paddingHorizontal: 12,
     borderRadius: 8,
     alignItems: 'center',
   },
-  tabText: {
+  viewButtonText: {
     fontSize: 14,
     fontWeight: '600',
   },
-  weekSelectorContainer: {
+  content: {
+    flex: 1,
+    paddingHorizontal: 20,
+  },
+  card: {
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+  },
+  cardHeader: {
+    marginBottom: 16,
+  },
+  cardTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 12,
+  },
+  emptyText: {
+    fontSize: 14,
+    textAlign: 'center',
+    paddingVertical: 20,
+  },
+  weekNavigation: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
-    gap: 8,
   },
-  weekButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
+  monthNavigation: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
   },
-  weekButtonText: {
+  yearNavigation: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  navButton: {
+    padding: 8,
+  },
+  navButtonText: {
     fontSize: 20,
     fontWeight: 'bold',
-  },
-  weekDisplay: {
-    flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  weekText: {
-    fontSize: 14,
-    fontWeight: '600',
   },
   todayButton: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    marginTop: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
-  monthSelectorContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-    gap: 8,
+  todayButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
-  monthButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  monthButtonText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  monthDisplay: {
-    flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  monthText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  yearSelectorContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-    gap: 8,
-  },
-  yearButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  yearButtonText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  yearDisplay: {
-    flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  yearText: {
+  monthYearText: {
     fontSize: 18,
     fontWeight: 'bold',
   },
-  habitCalendarCard: {
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-  },
-  habitCalendarHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  habitCalendarTitle: {
-    fontSize: 16,
+  yearText: {
+    fontSize: 24,
     fontWeight: 'bold',
-    flex: 1,
-  },
-  habitStats: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  habitStatsText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  calendarDayLabels: {
-    flexDirection: 'row',
-    marginBottom: 8,
-  },
-  calendarDayLabelCell: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  calendarDayLabel: {
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  calendarGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  calendarCell: {
-    width: `${100 / 7}%`,
-    aspectRatio: 1,
-    padding: 2,
-  },
-  calendarDay: {
-    flex: 1,
-    borderRadius: 8,
-    borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  calendarDayText: {
-    fontSize: 13,
-  },
-  gridContainer: {
-    borderRadius: 12,
-    overflow: 'hidden',
   },
   gridRow: {
     flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  gridCell: {
-    padding: 8,
-    justifyContent: 'center',
+    minHeight: 50,
     alignItems: 'center',
-  },
-  headerCell: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    paddingVertical: 12,
   },
   habitNameCell: {
     width: 120,
-    alignItems: 'flex-start',
-    paddingLeft: 8,
-    paddingRight: 4,
+    paddingHorizontal: 8,
+    justifyContent: 'center',
   },
   dayCell: {
     flex: 1,
+    minWidth: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerCell: {
+    paddingVertical: 8,
   },
   headerText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: 'bold',
+    textAlign: 'center',
   },
-  dateText: {
+  dateNumber: {
     fontSize: 10,
+    textAlign: 'center',
     marginTop: 2,
   },
-  habitText: {
-    fontSize: 12,
+  habitNameText: {
+    fontSize: 14,
     fontWeight: '600',
   },
   checkbox: {
@@ -1097,78 +708,85 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: 12,
     borderWidth: 2,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   checkmark: {
-    color: 'white',
+    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: 'bold',
   },
-  emptyState: {
+  monthCard: {
     borderRadius: 16,
-    padding: 40,
+    padding: 16,
+    marginBottom: 16,
+  },
+  monthCardHeader: {
+    marginBottom: 12,
+  },
+  monthHabitName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  monthStats: {
+    fontSize: 14,
+  },
+  calendarGrid: {
+    marginTop: 8,
+  },
+  calendarWeek: {
+    flexDirection: 'row',
+    marginBottom: 8,
+  },
+  calendarDayLabel: {
+    width: `${100 / 7}%`,
     alignItems: 'center',
   },
-  emptyText: {
-    fontSize: 16,
-    textAlign: 'center',
-    lineHeight: 24,
+  calendarDayLabelText: {
+    fontSize: 12,
+    fontWeight: 'bold',
   },
-  placeholderView: {
-    borderRadius: 12,
-    padding: 40,
+  calendarDays: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  calendarDay: {
+    width: `${100 / 7}%`,
+    aspectRatio: 1,
     alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 4,
+    marginBottom: 4,
   },
-  placeholderText: {
-    fontSize: 16,
-    textAlign: 'center',
-  },
-  yearGridContainer: {
-    borderRadius: 12,
-    overflow: 'hidden',
+  calendarDayText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   yearGridRow: {
     flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-    minHeight: 50,
-  },
-  yearGridCell: {
-    padding: 6,
-    justifyContent: 'center',
+    minHeight: 40,
     alignItems: 'center',
-  },
-  yearHeaderCell: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    paddingVertical: 10,
   },
   yearHabitNameCell: {
     width: 100,
-    alignItems: 'flex-start',
-    paddingLeft: 8,
-    paddingRight: 4,
+    paddingHorizontal: 8,
+    justifyContent: 'center',
   },
   yearMonthCell: {
     width: 60,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  yearHeaderText: {
-    fontSize: 11,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
   yearCompletionBox: {
     width: 48,
     height: 32,
     borderRadius: 6,
-    borderWidth: 1,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   yearCompletionText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: 'bold',
   },
 });
