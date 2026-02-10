@@ -6,6 +6,7 @@ export interface Habit {
   icon: string;
   color: string;
   frequency: string;
+  weekday?: string;
   createdAt: string;
 }
 
@@ -25,7 +26,7 @@ export interface JournalEntry {
   id: number;
   date: string;
   content: string;
-  tags: string; // Comma-separated tags
+  tags: string;
   createdAt: string;
 }
 
@@ -50,6 +51,7 @@ class Database {
           icon TEXT NOT NULL,
           color TEXT NOT NULL,
           frequency TEXT NOT NULL,
+          weekday TEXT,
           createdAt TEXT NOT NULL
         );
 
@@ -71,7 +73,7 @@ class Database {
         );
       `);
 
-      // Add tags column if it doesn't exist (migration)
+      // Add weekday column if it doesn't exist (migration)
       try {
         await this.db.execAsync(`
           ALTER TABLE journal_entries ADD COLUMN tags TEXT DEFAULT '';
@@ -104,8 +106,8 @@ class Database {
     const database = this.getDatabase();
     const createdAt = new Date().toISOString();
     await database.runAsync(
-      'INSERT INTO habits (name, icon, color, frequency, createdAt) VALUES (?, ?, ?, ?, ?)',
-      [habit.name, habit.icon, habit.color, habit.frequency, createdAt]
+      'INSERT INTO habits (name, icon, color, frequency, weekday, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
+      [habit.name, habit.icon, habit.color, habit.frequency, habit.weekday || null, createdAt]
     );
   }
 

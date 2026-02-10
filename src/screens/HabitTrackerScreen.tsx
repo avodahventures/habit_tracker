@@ -48,6 +48,13 @@ export function HabitTrackerScreen() {
     try {
       setLoading(true);
       const allHabits = await db.getHabits();
+      
+      console.log('All habits loaded:', allHabits.map(h => ({
+        name: h.name,
+        frequency: h.frequency,
+        weekday: h.weekday
+      })));
+      
       const logs = await db.getTodayLogs();
 
       const logsMap: Record<number, number> = {};
@@ -91,6 +98,49 @@ export function HabitTrackerScreen() {
     }
   };
 
+  const getHabitFrequencyText = (habit: Habit): string => {
+    if (habit.frequency === 'daily') {
+      return 'Daily';
+    } else if (habit.frequency === 'weekly') {
+      return habit.weekday ? `Weekly • ${habit.weekday}` : 'Weekly • Any weekday';
+    }
+    return 'Daily';
+  };
+
+  const shouldShowHabitToday = (habit: Habit): boolean => {
+    // If frequency is not set or is daily, always show
+    if (!habit.frequency || habit.frequency === 'daily') {
+      console.log(`${habit.name}: Daily habit - SHOW`);
+      return true;
+    }
+    
+    if (habit.frequency === 'weekly') {
+      // If no weekday specified or "Any weekday", show every day
+      if (!habit.weekday || habit.weekday === 'Any weekday') {
+        console.log(`${habit.name}: Weekly (Any weekday) - SHOW`);
+        return true;
+      }
+      
+      // Check if today matches the selected weekday
+      const today = new Date();
+      const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const todayName = weekdays[today.getDay()];
+      
+      const shouldShow = todayName === habit.weekday;
+      console.log(`${habit.name}: Weekly (${habit.weekday}) - Today is ${todayName} - ${shouldShow ? 'SHOW' : 'HIDE'}`);
+      
+      return shouldShow;
+    }
+    
+    console.log(`${habit.name}: Unknown frequency (${habit.frequency}) - SHOW by default`);
+    return true; // Default to showing
+  };
+
+  // Filter habits to show only those that should appear today
+  const todayHabits = habits.filter(shouldShowHabitToday);
+
+  console.log(`Total habits: ${habits.length}, Today's habits: ${todayHabits.length}`);
+
   if (loading) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: currentTheme.colors[0] }]}>
@@ -111,15 +161,15 @@ export function HabitTrackerScreen() {
       </View>
 
       {/* Habits List */}
-      {habits.length === 0 ? (
+      {todayHabits.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={[styles.emptyText, { color: currentTheme.textSecondary }]}>
-            No habits yet.{'\n'}Add some in Settings!
+            No habits scheduled for today.{'\n'}Add some in Settings!
           </Text>
         </View>
       ) : (
         <FlatList
-          data={habits}
+          data={todayHabits}
           keyExtractor={(item) => item.id.toString()}
           contentContainerStyle={styles.listContent}
           ListFooterComponent={
@@ -185,7 +235,7 @@ export function HabitTrackerScreen() {
                     {item.name}
                   </Text>
                   <Text style={[styles.habitFrequency, { color: currentTheme.textSecondary }]}>
-                    Daily
+                    {getHabitFrequencyText(item)}
                   </Text>
                 </View>
               </View>

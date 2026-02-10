@@ -65,13 +65,20 @@ const DEFAULT_HABITS: DefaultHabit[] = [
   },
 ];
 
+const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
 export function SettingsScreen() {
   const { currentTheme, themeType, setTheme } = useTheme();
   const { isPremium, setPremium } = usePremium();
   const [habits, setHabits] = useState<Habit[]>([]);
   const [selectedDefaultHabits, setSelectedDefaultHabits] = useState<Set<string>>(new Set());
   const [modalVisible, setModalVisible] = useState(false);
+  const [frequencyModalVisible, setFrequencyModalVisible] = useState(false);
+  const [weekdayModalVisible, setWeekdayModalVisible] = useState(false);
   const [habitName, setHabitName] = useState('');
+  const [pendingHabit, setPendingHabit] = useState<{ name: string; icon: string } | null>(null);
+  const [selectedFrequency, setSelectedFrequency] = useState<'daily' | 'weekly'>('daily');
+  const [selectedWeekday, setSelectedWeekday] = useState<string>('Any weekday');
 
   // Collapsible state
   const [themeExpanded, setThemeExpanded] = useState(false);
@@ -128,48 +135,76 @@ export function SettingsScreen() {
           console.error('Error deleting habit:', error);
         }
       }
-    } else {
-      // Add to selected and insert into database
-      newSelected.add(defaultHabit.id);
       
-      try {
-        await db.addHabit({
-          name: defaultHabit.name,
-          icon: defaultHabit.icon,
-          color: currentTheme.accent,
-          frequency: 'daily',
-        });
-        await loadHabits();
-      } catch (error) {
-        console.error('Error adding habit:', error);
-      }
+      setSelectedDefaultHabits(newSelected);
+      await saveSelectedDefaultHabits(newSelected);
+    } else {
+      // Show frequency selection dialog
+      setPendingHabit({ name: defaultHabit.name, icon: defaultHabit.icon });
+      setSelectedFrequency('daily');
+      setSelectedWeekday('Any weekday');
+      setFrequencyModalVisible(true);
     }
-    
-    setSelectedDefaultHabits(newSelected);
-    await saveSelectedDefaultHabits(newSelected);
   };
 
-  const handleAddHabit = async () => {
+  const handleFrequencySelected = () => {
+    if (selectedFrequency === 'weekly') {
+      setFrequencyModalVisible(false);
+      setWeekdayModalVisible(true);
+    } else {
+      // Daily - add immediately
+      confirmAddHabit();
+    }
+  };
+
+  const handleWeekdaySelected = () => {
+    setWeekdayModalVisible(false);
+    confirmAddHabit();
+  };
+
+  const confirmAddHabit = async () => {
+    if (!pendingHabit) return;
+
+    try {
+      await db.addHabit({
+        name: pendingHabit.name,
+        icon: pendingHabit.icon,
+        color: currentTheme.accent,
+        frequency: selectedFrequency,
+        weekday: selectedFrequency === 'weekly' ? selectedWeekday : undefined,
+      });
+
+      // Update selected default habits if it was a default habit
+      const defaultHabit = DEFAULT_HABITS.find(dh => dh.name === pendingHabit.name);
+      if (defaultHabit) {
+        const newSelected = new Set(selectedDefaultHabits);
+        newSelected.add(defaultHabit.id);
+        setSelectedDefaultHabits(newSelected);
+        await saveSelectedDefaultHabits(newSelected);
+      }
+
+      await loadHabits();
+      setPendingHabit(null);
+      setFrequencyModalVisible(false);
+      setWeekdayModalVisible(false);
+    } catch (error) {
+      console.error('Error adding habit:', error);
+      Alert.alert('Error', 'Failed to add habit');
+    }
+  };
+
+  const handleAddCustomHabit = async () => {
     if (!habitName.trim()) {
       Alert.alert('Error', 'Please enter a habit name');
       return;
     }
 
-    try {
-      await db.addHabit({
-        name: habitName,
-        icon: '✨',
-        color: currentTheme.accent,
-        frequency: 'daily',
-      });
-
-      setModalVisible(false);
-      setHabitName('');
-      loadHabits();
-    } catch (error) {
-      console.error('Error adding habit:', error);
-      Alert.alert('Error', 'Failed to add habit');
-    }
+    setModalVisible(false);
+    setPendingHabit({ name: habitName, icon: '✨' });
+    setSelectedFrequency('daily');
+    setSelectedWeekday('Any weekday');
+    setHabitName('');
+    setFrequencyModalVisible(true);
   };
 
   const handleDeleteHabit = (id: number, name: string) => {
@@ -229,6 +264,15 @@ export function SettingsScreen() {
         },
       ]
     );
+  };
+
+  const getHabitFrequencyText = (habit: Habit): string => {
+    if (habit.frequency === 'daily') {
+      return 'Daily';
+    } else if (habit.frequency === 'weekly') {
+      return habit.weekday ? `Weekly • ${habit.weekday}` : 'Weekly • Any weekday';
+    }
+    return 'Daily';
   };
 
   // Separate custom habits (not in default list)
@@ -417,38 +461,46 @@ export function SettingsScreen() {
                 <Text style={[styles.subsectionTitle, { color: currentTheme.textPrimary }]}>
                   Default Habits
                 </Text>
-                {DEFAULT_HABITS.map((defaultHabit) => (
-                  <TouchableOpacity
-                    key={defaultHabit.id}
-                    style={[styles.defaultHabitCard, { backgroundColor: currentTheme.cardBackground }]}
-                    onPress={() => toggleDefaultHabit(defaultHabit)}
-                  >
-                    <View style={styles.defaultHabitLeft}>
-                      <View
-                        style={[
-                          styles.defaultCheckbox,
-                          { borderColor: currentTheme.accent },
-                          selectedDefaultHabits.has(defaultHabit.id) && {
-                            backgroundColor: currentTheme.accent,
-                          },
-                        ]}
-                      >
-                        {selectedDefaultHabits.has(defaultHabit.id) && (
-                          <Text style={styles.checkmark}>✓</Text>
-                        )}
+                {DEFAULT_HABITS.map((defaultHabit) => {
+                  const existingHabit = habits.find(h => h.name === defaultHabit.name);
+                  return (
+                    <TouchableOpacity
+                      key={defaultHabit.id}
+                      style={[styles.defaultHabitCard, { backgroundColor: currentTheme.cardBackground }]}
+                      onPress={() => toggleDefaultHabit(defaultHabit)}
+                    >
+                      <View style={styles.defaultHabitLeft}>
+                        <View
+                          style={[
+                            styles.defaultCheckbox,
+                            { borderColor: currentTheme.accent },
+                            selectedDefaultHabits.has(defaultHabit.id) && {
+                              backgroundColor: currentTheme.accent,
+                            },
+                          ]}
+                        >
+                          {selectedDefaultHabits.has(defaultHabit.id) && (
+                            <Text style={styles.checkmark}>✓</Text>
+                          )}
+                        </View>
+                        <Text style={styles.defaultHabitIcon}>{defaultHabit.icon}</Text>
+                        <View style={styles.defaultHabitInfo}>
+                          <Text style={[styles.defaultHabitName, { color: currentTheme.textPrimary }]}>
+                            {defaultHabit.name}
+                          </Text>
+                          <Text style={[styles.defaultHabitDescription, { color: currentTheme.textSecondary }]}>
+                            {defaultHabit.description}
+                          </Text>
+                          {existingHabit && (
+                            <Text style={[styles.habitFrequencyLabel, { color: currentTheme.accent }]}>
+                              {getHabitFrequencyText(existingHabit)}
+                            </Text>
+                          )}
+                        </View>
                       </View>
-                      <Text style={styles.defaultHabitIcon}>{defaultHabit.icon}</Text>
-                      <View style={styles.defaultHabitInfo}>
-                        <Text style={[styles.defaultHabitName, { color: currentTheme.textPrimary }]}>
-                          {defaultHabit.name}
-                        </Text>
-                        <Text style={[styles.defaultHabitDescription, { color: currentTheme.textSecondary }]}>
-                          {defaultHabit.description}
-                        </Text>
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                ))}
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
 
               {/* Add Custom Habit Button */}
@@ -476,7 +528,7 @@ export function SettingsScreen() {
                           {habit.name}
                         </Text>
                         <Text style={[styles.habitFrequency, { color: currentTheme.textSecondary }]}>
-                          Daily • Custom
+                          {getHabitFrequencyText(habit)} • Custom
                         </Text>
                       </View>
                       <TouchableOpacity onPress={() => handleDeleteHabit(habit.id, habit.name)}>
@@ -491,7 +543,7 @@ export function SettingsScreen() {
         </View>
       </ScrollView>
 
-      {/* Add Custom Habit Modal */}
+      {/* Add Custom Habit Name Modal */}
       <Modal visible={modalVisible} animationType="slide" transparent={true}>
         <View style={styles.modalContainer}>
           <View style={[styles.modalContent, { backgroundColor: currentTheme.colors[1] }]}>
@@ -524,9 +576,154 @@ export function SettingsScreen() {
               </TouchableOpacity>
               <TouchableOpacity 
                 style={[styles.saveButton, { backgroundColor: currentTheme.accent }]} 
-                onPress={handleAddHabit}
+                onPress={handleAddCustomHabit}
               >
-                <Text style={styles.saveButtonText}>Add Habit</Text>
+                <Text style={styles.saveButtonText}>Next</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Frequency Selection Modal */}
+      <Modal visible={frequencyModalVisible} animationType="fade" transparent={true}>
+        <View style={styles.modalContainer}>
+          <View style={[styles.modalContent, { backgroundColor: currentTheme.colors[1] }]}>
+            <Text style={[styles.modalTitle, { color: currentTheme.textPrimary }]}>
+              How often?
+            </Text>
+            <Text style={[styles.modalSubtitle, { color: currentTheme.textSecondary }]}>
+              Choose the frequency for this habit
+            </Text>
+
+            <TouchableOpacity
+              style={[
+                styles.frequencyOption,
+                { 
+                  backgroundColor: currentTheme.cardBackground,
+                  borderColor: selectedFrequency === 'daily' ? currentTheme.accent : currentTheme.cardBorder,
+                  borderWidth: 2,
+                }
+              ]}
+              onPress={() => setSelectedFrequency('daily')}
+            >
+              <Text style={[styles.frequencyOptionText, { color: currentTheme.textPrimary }]}>
+                📅 Daily
+              </Text>
+              <Text style={[styles.frequencyOptionSubtext, { color: currentTheme.textSecondary }]}>
+                Track this habit every day
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.frequencyOption,
+                { 
+                  backgroundColor: currentTheme.cardBackground,
+                  borderColor: selectedFrequency === 'weekly' ? currentTheme.accent : currentTheme.cardBorder,
+                  borderWidth: 2,
+                }
+              ]}
+              onPress={() => setSelectedFrequency('weekly')}
+            >
+              <Text style={[styles.frequencyOptionText, { color: currentTheme.textPrimary }]}>
+                📆 Weekly
+              </Text>
+              <Text style={[styles.frequencyOptionSubtext, { color: currentTheme.textSecondary }]}>
+                Track this habit on specific days
+              </Text>
+            </TouchableOpacity>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.cancelButton, { backgroundColor: currentTheme.cardBackground }]}
+                onPress={() => {
+                  setFrequencyModalVisible(false);
+                  setPendingHabit(null);
+                }}
+              >
+                <Text style={[styles.cancelButtonText, { color: currentTheme.textPrimary }]}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.saveButton, { backgroundColor: currentTheme.accent }]} 
+                onPress={handleFrequencySelected}
+              >
+                <Text style={styles.saveButtonText}>
+                  {selectedFrequency === 'weekly' ? 'Next' : 'Done'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Weekday Selection Modal */}
+      <Modal visible={weekdayModalVisible} animationType="fade" transparent={true}>
+        <View style={styles.modalContainer}>
+          <View style={[styles.modalContent, { backgroundColor: currentTheme.colors[1] }]}>
+            <Text style={[styles.modalTitle, { color: currentTheme.textPrimary }]}>
+              Which day?
+            </Text>
+            <Text style={[styles.modalSubtitle, { color: currentTheme.textSecondary }]}>
+              Select a specific day or any weekday
+            </Text>
+
+            <ScrollView style={styles.weekdayScroll}>
+              <TouchableOpacity
+                style={[
+                  styles.weekdayOption,
+                  { 
+                    backgroundColor: currentTheme.cardBackground,
+                    borderColor: selectedWeekday === 'Any weekday' ? currentTheme.accent : currentTheme.cardBorder,
+                    borderWidth: 2,
+                  }
+                ]}
+                onPress={() => setSelectedWeekday('Any weekday')}
+              >
+                <Text style={[styles.weekdayOptionText, { color: currentTheme.textPrimary }]}>
+                  Any weekday
+                </Text>
+              </TouchableOpacity>
+
+              {WEEKDAYS.map((day) => (
+                <TouchableOpacity
+                  key={day}
+                  style={[
+                    styles.weekdayOption,
+                    { 
+                      backgroundColor: currentTheme.cardBackground,
+                      borderColor: selectedWeekday === day ? currentTheme.accent : currentTheme.cardBorder,
+                      borderWidth: 2,
+                    }
+                  ]}
+                  onPress={() => setSelectedWeekday(day)}
+                >
+                  <Text style={[styles.weekdayOptionText, { color: currentTheme.textPrimary }]}>
+                    {day}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.cancelButton, { backgroundColor: currentTheme.cardBackground }]}
+                onPress={() => {
+                  setWeekdayModalVisible(false);
+                  setFrequencyModalVisible(true);
+                }}
+              >
+                <Text style={[styles.cancelButtonText, { color: currentTheme.textPrimary }]}>
+                  Back
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.saveButton, { backgroundColor: currentTheme.accent }]} 
+                onPress={handleWeekdaySelected}
+              >
+                <Text style={styles.saveButtonText}>Done</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -692,6 +889,12 @@ const styles = StyleSheet.create({
   defaultHabitDescription: {
     fontSize: 13,
     lineHeight: 18,
+    marginBottom: 4,
+  },
+  habitFrequencyLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 2,
   },
   addCustomButton: {
     paddingVertical: 14,
@@ -743,13 +946,18 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     width: '90%',
+    maxHeight: '80%',
     borderRadius: 16,
     padding: 20,
   },
   modalTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 16,
+    marginBottom: 8,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    marginBottom: 20,
   },
   input: {
     borderRadius: 8,
@@ -757,9 +965,35 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 20,
   },
+  frequencyOption: {
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  frequencyOptionText: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  frequencyOptionSubtext: {
+    fontSize: 14,
+  },
+  weekdayScroll: {
+    maxHeight: 300,
+  },
+  weekdayOption: {
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 10,
+  },
+  weekdayOptionText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
   modalActions: {
     flexDirection: 'row',
     gap: 12,
+    marginTop: 10,
   },
   cancelButton: {
     flex: 1,
