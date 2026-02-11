@@ -97,9 +97,23 @@ class Database {
   }
 
   async getHabits(): Promise<Habit[]> {
-    const database = this.getDatabase();
-    const result = await database.getAllAsync('SELECT * FROM habits ORDER BY createdAt DESC');
-    return result as Habit[];
+  const database = this.getDatabase();
+  const result = await database.getAllAsync('SELECT * FROM habits ORDER BY createdAt DESC');
+  
+  console.log('RAW DATABASE RESULT:', JSON.stringify(result, null, 2));
+  
+  const habits = result as Habit[];
+  
+  console.log('PARSED HABITS:', habits.map(h => ({
+    id: h.id,
+    name: h.name,
+    frequency: h.frequency,
+    weekday: h.weekday,
+    hasFrequency: !!h.frequency,
+    frequencyType: typeof h.frequency
+  })));
+    
+    return habits;
   }
 
   async addHabit(habit: Omit<Habit, 'id' | 'createdAt'>): Promise<void> {

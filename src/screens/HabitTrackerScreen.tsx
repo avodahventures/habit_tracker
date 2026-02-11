@@ -7,6 +7,8 @@ import { useFocusEffect } from '@react-navigation/native';
 
 interface HabitWithCompletion extends Habit {
   completedToday: boolean;
+  completedThisWeek: boolean;
+  isScheduledToday: boolean;
 }
 
 interface VerseOfTheDay {
@@ -28,13 +30,30 @@ function getVerseOfTheDay(): VerseOfTheDay {
   
   const verse = verses.find(v => v.date === dateKey);
   
-  // Fallback to first verse if date not found (shouldn't happen with 365 verses)
+  // Fallback to first verse if date not found
   return verse || verses[0];
+}
+
+// Get the start of the current week (Sunday)
+function getWeekStart(date: Date): Date {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day;
+  return new Date(d.setDate(diff));
+}
+
+// Get the end of the current week (Saturday)
+function getWeekEnd(date: Date): Date {
+  const weekStart = getWeekStart(date);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
+  return weekEnd;
 }
 
 export function HabitTrackerScreen() {
   const { currentTheme } = useTheme();
-  const [habits, setHabits] = useState<HabitWithCompletion[]>([]);
+  const [dailyHabits, setDailyHabits] = useState<HabitWithCompletion[]>([]);
+  const [weeklyHabits, setWeeklyHabits] = useState<HabitWithCompletion[]>([]);
   const [loading, setLoading] = useState(true);
   const [verseOfTheDay] = useState<VerseOfTheDay>(getVerseOfTheDay());
 
@@ -48,26 +67,45 @@ export function HabitTrackerScreen() {
     try {
       setLoading(true);
       const allHabits = await db.getHabits();
-      
-      console.log('All habits loaded:', allHabits.map(h => ({
-        name: h.name,
-        frequency: h.frequency,
-        weekday: h.weekday
-      })));
-      
       const logs = await db.getTodayLogs();
+
+      // Get logs for the entire week
+      const today = new Date();
+      const weekStart = getWeekStart(today);
+      const weekEnd = getWeekEnd(today);
+      const weekStartStr = weekStart.toISOString().split('T')[0];
+      const weekEndStr = weekEnd.toISOString().split('T')[0];
 
       const logsMap: Record<number, number> = {};
       logs.forEach(log => {
         logsMap[log.habitId] = log.completed;
       });
 
+      // Map to track if habit was completed ANY day this week
+      const weekLogsMap: Record<number, boolean> = {};
+      
+      for (const habit of allHabits) {
+        const weekLogs = await db.getHabitLogs(habit.id, weekStartStr, weekEndStr);
+        const completedThisWeek = weekLogs.some(log => log.completed === 1);
+        weekLogsMap[habit.id] = completedThisWeek;
+      }
+
       const habitsWithCompletion = allHabits.map(habit => ({
         ...habit,
         completedToday: logsMap[habit.id] === 1,
+        completedThisWeek: weekLogsMap[habit.id] || false,
+        isScheduledToday: isHabitScheduledToday(habit),
       }));
 
-      setHabits(habitsWithCompletion);
+      // Separate daily and weekly habits
+      const daily = habitsWithCompletion.filter(h => !h.frequency || h.frequency === 'daily');
+      const weekly = habitsWithCompletion.filter(h => h.frequency === 'weekly');
+
+      // Sort weekly habits by day of week
+      const sortedWeekly = sortWeeklyHabits(weekly);
+
+      setDailyHabits(daily);
+      setWeeklyHabits(sortedWeekly);
     } catch (error) {
       console.error('Error loading habits:', error);
     } finally {
@@ -75,10 +113,61 @@ export function HabitTrackerScreen() {
     }
   };
 
-  const toggleHabit = async (habitId: number) => {
+  const sortWeeklyHabits = (habits: HabitWithCompletion[]): HabitWithCompletion[] => {
+    const weekdayOrder = ['Any weekday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    
+    return habits.sort((a, b) => {
+      const aDay = a.weekday || 'Any weekday';
+      const bDay = b.weekday || 'Any weekday';
+      return weekdayOrder.indexOf(aDay) - weekdayOrder.indexOf(bDay);
+    });
+  };
+
+  const isHabitScheduledToday = (habit: Habit): boolean => {
+    if (!habit.frequency || habit.frequency === 'daily') {
+      return true; // Daily habits are always scheduled
+    }
+    
+    if (habit.frequency === 'weekly') {
+      // If no weekday specified or "Any weekday", scheduled every day
+      if (!habit.weekday || habit.weekday === 'Any weekday') {
+        return true; // "Any weekday" is always schedulable
+      }
+      
+      // Check if today matches the selected weekday
+      const today = new Date();
+      const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const todayName = weekdays[today.getDay()];
+      
+      return todayName === habit.weekday;
+    }
+    
+    return true;
+  };
+
+  const canToggleWeeklyHabit = (habit: HabitWithCompletion): boolean => {
+    if (habit.frequency !== 'weekly') {
+      return true; // Not a weekly habit
+    }
+
+    // For "Any weekday" habits, check if already completed this week
+    if (!habit.weekday || habit.weekday === 'Any weekday') {
+      return !habit.completedThisWeek; // Can only toggle if not completed this week
+    }
+
+    // For specific day habits, check if today is the scheduled day
+    return habit.isScheduledToday;
+  };
+
+  const toggleHabit = async (habit: HabitWithCompletion) => {
+    if (!canToggleWeeklyHabit(habit)) {
+      // Don't allow toggling
+      return;
+    }
+    
     try {
       const today = new Date().toISOString().split('T')[0];
-      await db.toggleHabitLog(habitId, today);
+      await db.toggleHabitLog(habit.id, today);
       await loadHabits();
     } catch (error) {
       console.error('Error toggling habit:', error);
@@ -107,39 +196,89 @@ export function HabitTrackerScreen() {
     return 'Daily';
   };
 
-  const shouldShowHabitToday = (habit: Habit): boolean => {
-    // If frequency is not set or is daily, always show
-    if (!habit.frequency || habit.frequency === 'daily') {
-      console.log(`${habit.name}: Daily habit - SHOW`);
-      return true;
+  const getHabitStatusBadge = (habit: HabitWithCompletion): string | null => {
+    if (habit.frequency !== 'weekly') {
+      return null;
     }
-    
-    if (habit.frequency === 'weekly') {
-      // If no weekday specified or "Any weekday", show every day
-      if (!habit.weekday || habit.weekday === 'Any weekday') {
-        console.log(`${habit.name}: Weekly (Any weekday) - SHOW`);
-        return true;
+
+    // For "Any weekday" habits
+    if (!habit.weekday || habit.weekday === 'Any weekday') {
+      if (habit.completedThisWeek) {
+        return 'Done this week';
       }
-      
-      // Check if today matches the selected weekday
-      const today = new Date();
-      const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-      const todayName = weekdays[today.getDay()];
-      
-      const shouldShow = todayName === habit.weekday;
-      console.log(`${habit.name}: Weekly (${habit.weekday}) - Today is ${todayName} - ${shouldShow ? 'SHOW' : 'HIDE'}`);
-      
-      return shouldShow;
+      return null; // No badge if not completed yet
     }
-    
-    console.log(`${habit.name}: Unknown frequency (${habit.frequency}) - SHOW by default`);
-    return true; // Default to showing
+
+    // For specific day habits
+    if (!habit.isScheduledToday) {
+      return 'Not today';
+    }
+
+    return null;
   };
 
-  // Filter habits to show only those that should appear today
-  const todayHabits = habits.filter(shouldShowHabitToday);
-
-  console.log(`Total habits: ${habits.length}, Today's habits: ${todayHabits.length}`);
+  const renderHabitItem = (item: HabitWithCompletion) => {
+    const canToggle = canToggleWeeklyHabit(item);
+    const statusBadge = getHabitStatusBadge(item);
+    
+    return (
+      <TouchableOpacity
+        style={[
+          styles.habitCard,
+          { backgroundColor: currentTheme.cardBackground },
+          item.completedToday && canToggle && styles.habitCardCompleted,
+          !canToggle && styles.habitCardNotScheduled,
+        ]}
+        onPress={() => toggleHabit(item)}
+        disabled={!canToggle}
+      >
+        <View style={styles.habitLeft}>
+          <View
+            style={[
+              styles.checkbox,
+              { borderColor: currentTheme.accent },
+              item.completedToday && canToggle && {
+                backgroundColor: currentTheme.accent,
+                borderColor: currentTheme.accent,
+              },
+              !canToggle && {
+                borderColor: currentTheme.textSecondary,
+                opacity: 0.3,
+              },
+            ]}
+          >
+            {item.completedToday && canToggle && (
+              <Text style={styles.checkmark}>✓</Text>
+            )}
+          </View>
+          <View style={styles.habitInfo}>
+            <View style={styles.habitNameRow}>
+              <Text
+                style={[
+                  styles.habitName,
+                  { color: currentTheme.textPrimary },
+                  item.completedToday && canToggle && { color: currentTheme.accent },
+                  !canToggle && { color: currentTheme.textSecondary },
+                ]}
+              >
+                {item.name}
+              </Text>
+              {statusBadge && (
+                <View style={[styles.statusBadge, { backgroundColor: currentTheme.colors[1] }]}>
+                  <Text style={[styles.statusBadgeText, { color: currentTheme.textSecondary }]}>
+                    {statusBadge}
+                  </Text>
+                </View>
+              )}
+            </View>
+            <Text style={[styles.habitFrequency, { color: currentTheme.textSecondary }]}>
+              {getHabitFrequencyText(item)}
+            </Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   if (loading) {
     return (
@@ -149,97 +288,84 @@ export function HabitTrackerScreen() {
     );
   }
 
+  const hasNoHabits = dailyHabits.length === 0 && weeklyHabits.length === 0;
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: currentTheme.colors[0] }]}>
       <View style={styles.header}>
         <Text style={[styles.title, { color: currentTheme.textPrimary }]}>
           Today's Habits
         </Text>
-        <Text style={[styles.subtitle, { color: currentTheme.textSecondary }]}>
-          Track your daily spiritual journey
-        </Text>
       </View>
 
-      {/* Habits List */}
-      {todayHabits.length === 0 ? (
+      {hasNoHabits ? (
         <View style={styles.emptyContainer}>
           <Text style={[styles.emptyText, { color: currentTheme.textSecondary }]}>
-            No habits scheduled for today.{'\n'}Add some in Settings!
+            No habits yet.{'\n'}Add some in Settings!
           </Text>
         </View>
       ) : (
         <FlatList
-          data={todayHabits}
-          keyExtractor={(item) => item.id.toString()}
+          data={[{ type: 'content' }]}
+          keyExtractor={(item) => item.type}
           contentContainerStyle={styles.listContent}
-          ListFooterComponent={
-            /* Verse of the Day */
-            <View style={[styles.verseCard, { backgroundColor: currentTheme.cardBackground }]}>
-              <View style={styles.verseHeader}>
-                <Text style={styles.verseIcon}>📖</Text>
-                <Text style={[styles.verseTitle, { color: currentTheme.textPrimary }]}>
-                  Verse of the Day
-                </Text>
-              </View>
-              
-              <Text style={[styles.verseReference, { color: currentTheme.accent }]}>
-                {verseOfTheDay.reference} (KJV)
-              </Text>
-              
-              <Text style={[styles.verseText, { color: currentTheme.textPrimary }]}>
-                "{verseOfTheDay.text}"
-              </Text>
+          renderItem={() => (
+            <>
+              {/* Daily Habits Section */}
+              {dailyHabits.length > 0 && (
+                <View style={styles.section}>
+                  <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>
+                    Track your daily spiritual journey
+                  </Text>
+                  {dailyHabits.map((habit) => (
+                    <View key={habit.id}>
+                      {renderHabitItem(habit)}
+                    </View>
+                  ))}
+                </View>
+              )}
 
-              <TouchableOpacity
-                style={[styles.bibleGatewayButton, { backgroundColor: currentTheme.accent }]}
-                onPress={() => openBibleGateway(verseOfTheDay.bibleGatewayUrl)}
-              >
-                <Text style={styles.bibleGatewayButtonText}>
-                  Read Full Chapter on Bible Gateway 🔗
+              {/* Weekly Habits Section */}
+              {weeklyHabits.length > 0 && (
+                <View style={styles.section}>
+                  <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>
+                    Track your weekly spiritual journey
+                  </Text>
+                  {weeklyHabits.map((habit) => (
+                    <View key={habit.id}>
+                      {renderHabitItem(habit)}
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {/* Verse of the Day */}
+              <View style={[styles.verseCard, { backgroundColor: currentTheme.cardBackground }]}>
+                <View style={styles.verseHeader}>
+                  <Text style={styles.verseIcon}>📖</Text>
+                  <Text style={[styles.verseTitle, { color: currentTheme.textPrimary }]}>
+                    Verse of the Day
+                  </Text>
+                </View>
+                
+                <Text style={[styles.verseReference, { color: currentTheme.accent }]}>
+                  {verseOfTheDay.reference} (KJV)
                 </Text>
-              </TouchableOpacity>
-            </View>
-          }
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[
-                styles.habitCard,
-                { backgroundColor: currentTheme.cardBackground },
-                item.completedToday && styles.habitCardCompleted,
-              ]}
-              onPress={() => toggleHabit(item.id)}
-            >
-              <View style={styles.habitLeft}>
-                <View
-                  style={[
-                    styles.checkbox,
-                    { borderColor: currentTheme.accent },
-                    item.completedToday && {
-                      backgroundColor: currentTheme.accent,
-                      borderColor: currentTheme.accent,
-                    },
-                  ]}
+                
+                <Text style={[styles.verseText, { color: currentTheme.textPrimary }]}>
+                  "{verseOfTheDay.text}"
+                </Text>
+
+                <TouchableOpacity
+                  style={[styles.bibleGatewayButton, { backgroundColor: currentTheme.accent }]}
+                  onPress={() => openBibleGateway(verseOfTheDay.bibleGatewayUrl)}
                 >
-                  {item.completedToday && (
-                    <Text style={styles.checkmark}>✓</Text>
-                  )}
-                </View>
-                <View style={styles.habitInfo}>
-                  <Text
-                    style={[
-                      styles.habitName,
-                      { color: currentTheme.textPrimary },
-                      item.completedToday && { color: currentTheme.accent },
-                    ]}
-                  >
-                    {item.name}
+                  <Text style={styles.bibleGatewayButtonText}>
+                    Read Full Chapter on Bible Gateway 🔗
                   </Text>
-                  <Text style={[styles.habitFrequency, { color: currentTheme.textSecondary }]}>
-                    {getHabitFrequencyText(item)}
-                  </Text>
-                </View>
+                </TouchableOpacity>
               </View>
-            </TouchableOpacity>
+            </>
           )}
         />
       )}
@@ -265,8 +391,13 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 4,
   },
-  subtitle: {
+  section: {
+    marginBottom: 24,
+  },
+  sectionSubtitle: {
     fontSize: 16,
+    marginBottom: 12,
+    fontWeight: '500',
   },
   listContent: {
     paddingHorizontal: 20,
@@ -294,6 +425,9 @@ const styles = StyleSheet.create({
   habitCardCompleted: {
     opacity: 0.7,
   },
+  habitCardNotScheduled: {
+    opacity: 0.5,
+  },
   habitLeft: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -316,10 +450,24 @@ const styles = StyleSheet.create({
   habitInfo: {
     flex: 1,
   },
+  habitNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   habitName: {
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 4,
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
   },
   habitFrequency: {
     fontSize: 14,
