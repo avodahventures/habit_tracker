@@ -1,9 +1,25 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Linking } from 'react-native';
+import React, { useState, useRef } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
+  ActivityIndicator,
+  Linking,
+  AppState,
+  AppStateStatus,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
 import { db, Habit } from '../database/database';
 import { useFocusEffect } from '@react-navigation/native';
+import {
+  checkHabitsAndNotify,
+  getMiniCelebrationMessage,
+  NotificationMessage,
+} from '../utils/notifications';
+import { NotificationBanner } from '../components/NotificationBanner';
 
 interface HabitWithCompletion extends Habit {
   completedToday: boolean;
@@ -18,23 +34,17 @@ interface VerseOfTheDay {
   bibleGatewayUrl: string;
 }
 
-// Import verses from JSON file
 const verses: VerseOfTheDay[] = require('../../assets/verses.json');
 
-// Get verse for today's date
 function getVerseOfTheDay(): VerseOfTheDay {
   const today = new Date();
   const month = String(today.getMonth() + 1).padStart(2, '0');
   const day = String(today.getDate()).padStart(2, '0');
   const dateKey = `${month}-${day}`;
-  
   const verse = verses.find(v => v.date === dateKey);
-  
-  // Fallback to first verse if date not found
   return verse || verses[0];
 }
 
-// Get the start of the current week (Sunday)
 function getWeekStart(date: Date): Date {
   const d = new Date(date);
   const day = d.getDay();
@@ -42,12 +52,23 @@ function getWeekStart(date: Date): Date {
   return new Date(d.setDate(diff));
 }
 
-// Get the end of the current week (Saturday)
 function getWeekEnd(date: Date): Date {
   const weekStart = getWeekStart(date);
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekStart.getDate() + 6);
   return weekEnd;
+}
+
+function isNearHour(targetHour: number): boolean {
+  const now = new Date();
+  const currentHour = now.getHours();
+  const currentMinute = now.getMinutes();
+  return currentHour === targetHour && currentMinute <= 10;
+}
+
+function getNotificationShownKey(hour: number): string {
+  const today = new Date().toISOString().split('T')[0];
+  return `notification_shown_${today}_${hour}`;
 }
 
 export function HabitTrackerScreen() {
@@ -56,12 +77,84 @@ export function HabitTrackerScreen() {
   const [weeklyHabits, setWeeklyHabits] = useState<HabitWithCompletion[]>([]);
   const [loading, setLoading] = useState(true);
   const [verseOfTheDay] = useState<VerseOfTheDay>(getVerseOfTheDay());
+  const [banner, setBanner] = useState<NotificationMessage | null>(null);
+  const [bannerVisible, setBannerVisible] = useState(false);
+  const [isCelebration, setIsCelebration] = useState(false);
+  const [isMini, setIsMini] = useState(false);
+
+  const shownNotifications = useRef<Set<string>>(new Set());
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const appStateRef = useRef(AppState.currentState);
 
   useFocusEffect(
     React.useCallback(() => {
       loadHabits();
+      startTimeCheck();
+
+      return () => {
+        stopTimeCheck();
+      };
     }, [])
   );
+
+  const startTimeCheck = () => {
+    stopTimeCheck();
+
+    checkTimeAndShowBanner();
+
+    timerRef.current = setInterval(() => {
+      checkTimeAndShowBanner();
+    }, 60000);
+
+    const subscription = AppState.addEventListener('change', (nextState: AppStateStatus) => {
+      if (appStateRef.current.match(/inactive|background/) && nextState === 'active') {
+        checkTimeAndShowBanner();
+      }
+      appStateRef.current = nextState;
+    });
+
+    return () => subscription.remove();
+  };
+
+  const stopTimeCheck = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  const checkTimeAndShowBanner = async () => {
+    const isNoon = isNearHour(12);
+    const isEvening = isNearHour(18);
+    const noonKey = getNotificationShownKey(12);
+    const eveningKey = getNotificationShownKey(18);
+
+    if (isNoon && !shownNotifications.current.has(noonKey)) {
+      const notification = await checkHabitsAndNotify();
+      if (notification && !notification.title.includes('🎉')) {
+        shownNotifications.current.add(noonKey);
+        showBanner(notification, false, false);
+      }
+    } else if (isEvening && !shownNotifications.current.has(eveningKey)) {
+      const notification = await checkHabitsAndNotify();
+      if (notification && !notification.title.includes('🎉')) {
+        shownNotifications.current.add(eveningKey);
+        showBanner(notification, false, false);
+      }
+    }
+  };
+
+  const showBanner = (
+    notification: NotificationMessage,
+    celebration: boolean,
+    mini: boolean
+  ) => {
+    if (bannerVisible) return;
+    setIsCelebration(celebration);
+    setIsMini(mini);
+    setBanner(notification);
+    setBannerVisible(true);
+  };
 
   const loadHabits = async () => {
     try {
@@ -69,7 +162,6 @@ export function HabitTrackerScreen() {
       const allHabits = await db.getHabits();
       const logs = await db.getTodayLogs();
 
-      // Get logs for the entire week
       const today = new Date();
       const weekStart = getWeekStart(today);
       const weekEnd = getWeekEnd(today);
@@ -81,9 +173,7 @@ export function HabitTrackerScreen() {
         logsMap[log.habitId] = log.completed;
       });
 
-      // Map to track if habit was completed ANY day this week
       const weekLogsMap: Record<number, boolean> = {};
-      
       for (const habit of allHabits) {
         const weekLogs = await db.getHabitLogs(habit.id, weekStartStr, weekEndStr);
         const completedThisWeek = weekLogs.some(log => log.completed === 1);
@@ -97,15 +187,23 @@ export function HabitTrackerScreen() {
         isScheduledToday: isHabitScheduledToday(habit),
       }));
 
-      // Separate daily and weekly habits
-      const daily = habitsWithCompletion.filter(h => !h.frequency || h.frequency === 'daily');
-      const weekly = habitsWithCompletion.filter(h => h.frequency === 'weekly');
-
-      // Sort weekly habits by day of week
+      const daily = habitsWithCompletion.filter(
+        h => !h.frequency || h.frequency === 'daily'
+      );
+      const weekly = habitsWithCompletion.filter(
+        h => h.frequency === 'weekly'
+      );
       const sortedWeekly = sortWeeklyHabits(weekly);
 
       setDailyHabits(daily);
       setWeeklyHabits(sortedWeekly);
+
+      // Show full celebration if all habits are done
+      const notification = await checkHabitsAndNotify();
+      if (notification && notification.title.includes('🎉')) {
+        showBanner(notification, true, false);
+      }
+
     } catch (error) {
       console.error('Error loading habits:', error);
     } finally {
@@ -113,9 +211,56 @@ export function HabitTrackerScreen() {
     }
   };
 
+  const loadHabitsQuiet = async () => {
+    try {
+      const allHabits = await db.getHabits();
+      const logs = await db.getTodayLogs();
+
+      const today = new Date();
+      const weekStart = getWeekStart(today);
+      const weekEnd = getWeekEnd(today);
+      const weekStartStr = weekStart.toISOString().split('T')[0];
+      const weekEndStr = weekEnd.toISOString().split('T')[0];
+
+      const logsMap: Record<number, number> = {};
+      logs.forEach(log => {
+        logsMap[log.habitId] = log.completed;
+      });
+
+      const weekLogsMap: Record<number, boolean> = {};
+      for (const habit of allHabits) {
+        const weekLogs = await db.getHabitLogs(habit.id, weekStartStr, weekEndStr);
+        const completedThisWeek = weekLogs.some(log => log.completed === 1);
+        weekLogsMap[habit.id] = completedThisWeek;
+      }
+
+      const habitsWithCompletion = allHabits.map(habit => ({
+        ...habit,
+        completedToday: logsMap[habit.id] === 1,
+        completedThisWeek: weekLogsMap[habit.id] || false,
+        isScheduledToday: isHabitScheduledToday(habit),
+      }));
+
+      const daily = habitsWithCompletion.filter(
+        h => !h.frequency || h.frequency === 'daily'
+      );
+      const weekly = habitsWithCompletion.filter(
+        h => h.frequency === 'weekly'
+      );
+      const sortedWeekly = sortWeeklyHabits(weekly);
+
+      setDailyHabits(daily);
+      setWeeklyHabits(sortedWeekly);
+    } catch (error) {
+      console.error('Error loading habits quietly:', error);
+    }
+  };
+
   const sortWeeklyHabits = (habits: HabitWithCompletion[]): HabitWithCompletion[] => {
-    const weekdayOrder = ['Any weekday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    
+    const weekdayOrder = [
+      'Any weekday', 'Sunday', 'Monday', 'Tuesday',
+      'Wednesday', 'Thursday', 'Friday', 'Saturday',
+    ];
     return habits.sort((a, b) => {
       const aDay = a.weekday || 'Any weekday';
       const bDay = b.weekday || 'Any weekday';
@@ -125,50 +270,73 @@ export function HabitTrackerScreen() {
 
   const isHabitScheduledToday = (habit: Habit): boolean => {
     if (!habit.frequency || habit.frequency === 'daily') {
-      return true; // Daily habits are always scheduled
+      return true;
     }
-    
     if (habit.frequency === 'weekly') {
-      // If no weekday specified or "Any weekday", scheduled every day
       if (!habit.weekday || habit.weekday === 'Any weekday') {
-        return true; // "Any weekday" is always schedulable
+        return true;
       }
-      
-      // Check if today matches the selected weekday
       const today = new Date();
-      const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const weekdays = [
+        'Sunday', 'Monday', 'Tuesday', 'Wednesday',
+        'Thursday', 'Friday', 'Saturday',
+      ];
       const todayName = weekdays[today.getDay()];
-      
       return todayName === habit.weekday;
     }
-    
     return true;
   };
 
   const canToggleWeeklyHabit = (habit: HabitWithCompletion): boolean => {
     if (habit.frequency !== 'weekly') {
-      return true; // Not a weekly habit
+      return true;
     }
-
-    // For "Any weekday" habits, check if already completed this week
     if (!habit.weekday || habit.weekday === 'Any weekday') {
-      return !habit.completedThisWeek; // Can only toggle if not completed this week
+      return !habit.completedThisWeek;
     }
-
-    // For specific day habits, check if today is the scheduled day
     return habit.isScheduledToday;
   };
 
   const toggleHabit = async (habit: HabitWithCompletion) => {
     if (!canToggleWeeklyHabit(habit)) {
-      // Don't allow toggling
       return;
     }
-    
+
     try {
       const today = new Date().toISOString().split('T')[0];
       await db.toggleHabitLog(habit.id, today);
-      await loadHabits();
+
+      // Only show banners when checking (not unchecking)
+      if (!habit.completedToday) {
+        // Load habits quietly first to get updated state
+        await loadHabitsQuiet();
+
+        // Check if all habits are now complete
+        const notification = await checkHabitsAndNotify();
+
+        if (notification && notification.title.includes('🎉')) {
+          // All habits done - show full celebration
+          showBanner(notification, true, false);
+        } else {
+          // Show mini celebration for partial completion
+          const allHabits = [...dailyHabits, ...weeklyHabits];
+          const toggleableHabits = allHabits.filter(h => canToggleWeeklyHabit(h));
+          const completedCount = toggleableHabits.filter(h =>
+            h.id === habit.id ? true : h.completedToday
+          ).length;
+          const totalCount = toggleableHabits.length;
+
+          const miniMessage = getMiniCelebrationMessage(
+            habit.name,
+            completedCount,
+            totalCount
+          );
+          showBanner(miniMessage, false, true);
+        }
+      } else {
+        // Just reload quietly when unchecking
+        await loadHabitsQuiet();
+      }
     } catch (error) {
       console.error('Error toggling habit:', error);
     }
@@ -179,8 +347,6 @@ export function HabitTrackerScreen() {
       const supported = await Linking.canOpenURL(url);
       if (supported) {
         await Linking.openURL(url);
-      } else {
-        console.error("Don't know how to open URI: " + url);
       }
     } catch (error) {
       console.error('Error opening Bible Gateway:', error);
@@ -200,27 +366,22 @@ export function HabitTrackerScreen() {
     if (habit.frequency !== 'weekly') {
       return null;
     }
-
-    // For "Any weekday" habits
     if (!habit.weekday || habit.weekday === 'Any weekday') {
       if (habit.completedThisWeek) {
         return 'Done this week';
       }
-      return null; // No badge if not completed yet
+      return null;
     }
-
-    // For specific day habits
     if (!habit.isScheduledToday) {
       return 'Not today';
     }
-
     return null;
   };
 
   const renderHabitItem = (item: HabitWithCompletion) => {
     const canToggle = canToggleWeeklyHabit(item);
     const statusBadge = getHabitStatusBadge(item);
-    
+
     return (
       <TouchableOpacity
         style={[
@@ -264,14 +425,23 @@ export function HabitTrackerScreen() {
                 {item.name}
               </Text>
               {statusBadge && (
-                <View style={[styles.statusBadge, { backgroundColor: currentTheme.colors[1] }]}>
-                  <Text style={[styles.statusBadgeText, { color: currentTheme.textSecondary }]}>
+                <View style={[
+                  styles.statusBadge,
+                  { backgroundColor: currentTheme.colors[1] }
+                ]}>
+                  <Text style={[
+                    styles.statusBadgeText,
+                    { color: currentTheme.textSecondary }
+                  ]}>
                     {statusBadge}
                   </Text>
                 </View>
               )}
             </View>
-            <Text style={[styles.habitFrequency, { color: currentTheme.textSecondary }]}>
+            <Text style={[
+              styles.habitFrequency,
+              { color: currentTheme.textSecondary }
+            ]}>
               {getHabitFrequencyText(item)}
             </Text>
           </View>
@@ -282,7 +452,10 @@ export function HabitTrackerScreen() {
 
   if (loading) {
     return (
-      <View style={[styles.loadingContainer, { backgroundColor: currentTheme.colors[0] }]}>
+      <View style={[
+        styles.loadingContainer,
+        { backgroundColor: currentTheme.colors[0] }
+      ]}>
         <ActivityIndicator size="large" color={currentTheme.accent} />
       </View>
     );
@@ -291,90 +464,130 @@ export function HabitTrackerScreen() {
   const hasNoHabits = dailyHabits.length === 0 && weeklyHabits.length === 0;
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: currentTheme.colors[0] }]}>
-      <View style={styles.header}>
-        <Text style={[styles.title, { color: currentTheme.textPrimary }]}>
-          Today's Habits
-        </Text>
-      </View>
-
-      {hasNoHabits ? (
-        <View style={styles.emptyContainer}>
-          <Text style={[styles.emptyText, { color: currentTheme.textSecondary }]}>
-            No habits yet.{'\n'}Add some in Settings!
+    <View style={[styles.container, { backgroundColor: currentTheme.colors[0] }]}>
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.header}>
+          <Text style={[styles.title, { color: currentTheme.textPrimary }]}>
+            Today's Habits
           </Text>
         </View>
-      ) : (
-        <FlatList
-          data={[{ type: 'content' }]}
-          keyExtractor={(item) => item.type}
-          contentContainerStyle={styles.listContent}
-          renderItem={() => (
-            <>
-              {/* Daily Habits Section */}
-              {dailyHabits.length > 0 && (
-                <View style={styles.section}>
-                  <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>
-                    Track your daily spiritual journey
-                  </Text>
-                  {dailyHabits.map((habit) => (
-                    <View key={habit.id}>
-                      {renderHabitItem(habit)}
-                    </View>
-                  ))}
-                </View>
-              )}
 
-              {/* Weekly Habits Section */}
-              {weeklyHabits.length > 0 && (
-                <View style={styles.section}>
-                  <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>
-                    Track your weekly spiritual journey
-                  </Text>
-                  {weeklyHabits.map((habit) => (
-                    <View key={habit.id}>
-                      {renderHabitItem(habit)}
-                    </View>
-                  ))}
-                </View>
-              )}
+        {hasNoHabits ? (
+          <View style={styles.emptyContainer}>
+            <Text style={[styles.emptyText, { color: currentTheme.textSecondary }]}>
+              No habits yet.{'\n'}Add some in Settings!
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            data={[{ type: 'content' }]}
+            keyExtractor={(item) => item.type}
+            contentContainerStyle={styles.listContent}
+            renderItem={() => (
+              <>
+                {/* Daily Habits Section */}
+                {dailyHabits.length > 0 && (
+                  <View style={styles.section}>
+                    <Text style={[
+                      styles.sectionSubtitle,
+                      { color: currentTheme.textSecondary }
+                    ]}>
+                      Track your daily spiritual journey
+                    </Text>
+                    {dailyHabits.map((habit) => (
+                      <View key={habit.id}>
+                        {renderHabitItem(habit)}
+                      </View>
+                    ))}
+                  </View>
+                )}
 
-              {/* Verse of the Day */}
-              <View style={[styles.verseCard, { backgroundColor: currentTheme.cardBackground }]}>
-                <View style={styles.verseHeader}>
-                  <Text style={styles.verseIcon}>📖</Text>
-                  <Text style={[styles.verseTitle, { color: currentTheme.textPrimary }]}>
-                    Verse of the Day
-                  </Text>
-                </View>
-                
-                <Text style={[styles.verseReference, { color: currentTheme.accent }]}>
-                  {verseOfTheDay.reference} (KJV)
-                </Text>
-                
-                <Text style={[styles.verseText, { color: currentTheme.textPrimary }]}>
-                  "{verseOfTheDay.text}"
-                </Text>
+                {/* Weekly Habits Section */}
+                {weeklyHabits.length > 0 && (
+                  <View style={styles.section}>
+                    <Text style={[
+                      styles.sectionSubtitle,
+                      { color: currentTheme.textSecondary }
+                    ]}>
+                      Track your weekly spiritual journey
+                    </Text>
+                    {weeklyHabits.map((habit) => (
+                      <View key={habit.id}>
+                        {renderHabitItem(habit)}
+                      </View>
+                    ))}
+                  </View>
+                )}
 
-                <TouchableOpacity
-                  style={[styles.bibleGatewayButton, { backgroundColor: currentTheme.accent }]}
-                  onPress={() => openBibleGateway(verseOfTheDay.bibleGatewayUrl)}
-                >
-                  <Text style={styles.bibleGatewayButtonText}>
-                    Read Full Chapter on Bible Gateway 🔗
+                {/* Verse of the Day */}
+                <View style={[
+                  styles.verseCard,
+                  { backgroundColor: currentTheme.cardBackground }
+                ]}>
+                  <View style={styles.verseHeader}>
+                    <Text style={styles.verseIcon}>📖</Text>
+                    <Text style={[
+                      styles.verseTitle,
+                      { color: currentTheme.textPrimary }
+                    ]}>
+                      Verse of the Day
+                    </Text>
+                  </View>
+                  <Text style={[
+                    styles.verseReference,
+                    { color: currentTheme.accent }
+                  ]}>
+                    {verseOfTheDay.reference} (KJV)
                   </Text>
-                </TouchableOpacity>
-              </View>
-            </>
-          )}
+                  <Text style={[
+                    styles.verseText,
+                    { color: currentTheme.textPrimary }
+                  ]}>
+                    "{verseOfTheDay.text}"
+                  </Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.bibleGatewayButton,
+                      { backgroundColor: currentTheme.accent }
+                    ]}
+                    onPress={() => openBibleGateway(verseOfTheDay.bibleGatewayUrl)}
+                  >
+                    <Text style={styles.bibleGatewayButtonText}>
+                      Read Full Chapter on Bible Gateway 🔗
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          />
+        )}
+      </SafeAreaView>
+
+      {/* In-App Notification Banner */}
+      {banner && (
+        <NotificationBanner
+          title={banner.title}
+          body={banner.body}
+          visible={bannerVisible}
+          isCelebration={isCelebration}
+          isMini={isMini}
+          onDismiss={() => {
+            setBannerVisible(false);
+            setBanner(null);
+            setIsCelebration(false);
+            setIsMini(false);
+          }}
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+  },
+  safeArea: {
     flex: 1,
   },
   loadingContainer: {
