@@ -1,20 +1,22 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
+  TextInput,
+  Modal,
+  Alert,
+  ActivityIndicator,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { db, JournalEntry } from '../database/database';
 import { useTheme } from '../context/ThemeContext';
 import { usePremium } from '../context/PremiumContext';
+import { db, JournalEntry } from '../database/database';
 import { useFocusEffect } from '@react-navigation/native';
 import { PremiumModal } from '../components/PremiumModal';
-
-const AVAILABLE_TAGS = [
-  'Answered Prayer',
-  'Lesson Learned',
-  'Gratitude',
-  'Guidance Needed',
-  'Breakthrough',
-  'Testimony',
-];
+import { exportJournalToPDF, exportJournalToExcel } from '../utils/export';
 
 export function JournalScreen() {
   const { currentTheme } = useTheme();
@@ -22,15 +24,15 @@ export function JournalScreen() {
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [filteredEntries, setFilteredEntries] = useState<JournalEntry[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
-  const [premiumModalVisible, setPremiumModalVisible] = useState(false);
-  const [premiumFeature, setPremiumFeature] = useState('');
   const [editingEntry, setEditingEntry] = useState<JournalEntry | null>(null);
   const [entryText, setEntryText] = useState('');
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [entryTags, setEntryTags] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterTag, setFilterTag] = useState<string | null>(null);
-  const [showTagFilter, setShowTagFilter] = useState(false);
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [premiumModalVisible, setPremiumModalVisible] = useState(false);
+  const [premiumFeature, setPremiumFeature] = useState('');
+  const [exporting, setExporting] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -50,6 +52,14 @@ export function JournalScreen() {
 
   const handleSearch = async (query: string) => {
     setSearchQuery(query);
+    setSelectedTag(null);
+
+    if (!isPremium) {
+      setPremiumFeature('Search & Filter');
+      setPremiumModalVisible(true);
+      return;
+    }
+
     if (!query.trim()) {
       setFilteredEntries(entries);
       return;
@@ -63,18 +73,20 @@ export function JournalScreen() {
     }
   };
 
-  const handleFilterByTag = async (tag: string) => {
+  const handleTagFilter = async (tag: string) => {
     if (!isPremium) {
-      setPremiumFeature('Tag filtering');
+      setPremiumFeature('Tag Filtering');
       setPremiumModalVisible(true);
       return;
     }
 
-    if (filterTag === tag) {
-      setFilterTag(null);
+    if (selectedTag === tag) {
+      setSelectedTag(null);
       setFilteredEntries(entries);
+      setSearchQuery('');
     } else {
-      setFilterTag(tag);
+      setSelectedTag(tag);
+      setSearchQuery('');
       try {
         const results = await db.getJournalEntriesByTag(tag);
         setFilteredEntries(results);
@@ -84,288 +96,292 @@ export function JournalScreen() {
     }
   };
 
-  const handleExport = () => {
-    if (!isPremium) {
-      setPremiumFeature('Export to PDF/Spreadsheet');
-      setPremiumModalVisible(true);
-      return;
-    }
-
-    Alert.alert(
-      'Export Journal',
-      'Choose export format:',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'PDF',
-          onPress: () => {
-            // TODO: Implement PDF export
-            Alert.alert('Coming Soon', 'PDF export will be implemented');
-          },
-        },
-        {
-          text: 'Spreadsheet',
-          onPress: () => {
-            // TODO: Implement spreadsheet export
-            Alert.alert('Coming Soon', 'Spreadsheet export will be implemented');
-          },
-        },
-      ]
-    );
-  };
-
-  const toggleTag = (tag: string) => {
-    if (!isPremium) {
-      setPremiumFeature('Tagging entries');
-      setPremiumModalVisible(true);
-      return;
-    }
-
-    if (selectedTags.includes(tag)) {
-      setSelectedTags(selectedTags.filter(t => t !== tag));
-    } else {
-      setSelectedTags([...selectedTags, tag]);
-    }
-  };
-
-  const handleSaveEntry = async () => {
+  const handleSave = async () => {
     if (!entryText.trim()) {
-      Alert.alert('Error', 'Please enter some text');
+      Alert.alert('Error', 'Please write something in your journal entry');
+      return;
+    }
+
+    if (entryTags.trim() && !isPremium) {
+      setPremiumFeature('Journal Tags');
+      setPremiumModalVisible(true);
       return;
     }
 
     try {
-      const tagsString = selectedTags.join(',');
+      const date = new Date().toISOString().split('T')[0];
 
       if (editingEntry) {
-        await db.updateJournalEntry(editingEntry.id, entryText, tagsString);
+        await db.updateJournalEntry(editingEntry.id, entryText, entryTags);
       } else {
-        await db.addJournalEntry(selectedDate, entryText, tagsString);
+        await db.addJournalEntry(date, entryText, entryTags);
       }
-      
+
       setModalVisible(false);
       setEntryText('');
-      setSelectedTags([]);
+      setEntryTags('');
       setEditingEntry(null);
-      setSelectedDate(new Date().toISOString().split('T')[0]);
       loadEntries();
     } catch (error) {
       console.error('Error saving entry:', error);
-      Alert.alert('Error', 'Failed to save entry');
+      Alert.alert('Error', 'Failed to save journal entry');
     }
   };
 
-  const handleEditEntry = (entry: JournalEntry) => {
+  const handleEdit = (entry: JournalEntry) => {
     setEditingEntry(entry);
     setEntryText(entry.content);
-    setSelectedDate(entry.date);
-    setSelectedTags(entry.tags ? entry.tags.split(',').filter(Boolean) : []);
+    setEntryTags(entry.tags);
     setModalVisible(true);
   };
 
-  const handleDeleteEntry = (id: number) => {
-    Alert.alert(
-      'Delete Entry',
-      'Are you sure you want to delete this prayer journal entry?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await db.deleteJournalEntry(id);
-              loadEntries();
-            } catch (error) {
-              console.error('Error deleting entry:', error);
-            }
-          },
+  const handleDelete = (entry: JournalEntry) => {
+    Alert.alert('Delete Entry', 'Are you sure you want to delete this entry?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await db.deleteJournalEntry(entry.id);
+            loadEntries();
+          } catch (error) {
+            console.error('Error deleting entry:', error);
+          }
         },
-      ]
-    );
+      },
+    ]);
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString + 'T00:00:00');
-    return date.toLocaleDateString('en-US', { 
-      weekday: 'long', 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
+  const handleExportPDF = async () => {
+    if (!isPremium) {
+      setPremiumFeature('Export to PDF');
+      setPremiumModalVisible(true);
+      setShowExportMenu(false);
+      return;
+    }
+
+    try {
+      setExporting(true);
+      setShowExportMenu(false);
+      await exportJournalToPDF(filteredEntries.length > 0 ? filteredEntries : entries);
+      Alert.alert('Success', 'Journal exported successfully!');
+    } catch (error) {
+      console.error('Export PDF error:', error);
+      Alert.alert('Error', 'Failed to export journal to PDF');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportExcel = async () => {
+    if (!isPremium) {
+      setPremiumFeature('Export to Spreadsheet');
+      setPremiumModalVisible(true);
+      setShowExportMenu(false);
+      return;
+    }
+
+    try {
+      setExporting(true);
+      setShowExportMenu(false);
+      await exportJournalToExcel(filteredEntries.length > 0 ? filteredEntries : entries);
+      Alert.alert('Success', 'Journal exported successfully!');
+    } catch (error) {
+      console.error('Export Excel error:', error);
+      Alert.alert('Error', 'Failed to export journal to spreadsheet');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const getAllTags = (): string[] => {
+    const tagSet = new Set<string>();
+    entries.forEach(entry => {
+      if (entry.tags) {
+        entry.tags.split(',').forEach(tag => {
+          const trimmed = tag.trim();
+          if (trimmed) tagSet.add(trimmed);
+        });
+      }
     });
+    return Array.from(tagSet);
   };
 
-  const parseTags = (tagsString: string): string[] => {
-    return tagsString ? tagsString.split(',').filter(Boolean) : [];
-  };
+  const allTags = getAllTags();
+  const displayedEntries = filteredEntries.length > 0 ? filteredEntries : entries;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: currentTheme.colors[0] }]}>
       <View style={styles.header}>
-        <View>
-          <Text style={[styles.title, { color: currentTheme.textPrimary }]}>Prayer Journal 🙏</Text>
-          <Text style={[styles.subtitle, { color: currentTheme.textSecondary }]}>
-            Document your spiritual journey
+        <View style={styles.headerTop}>
+          <Text style={[styles.title, { color: currentTheme.textPrimary }]}>
+            Prayer Journal
           </Text>
+          <View style={styles.headerButtons}>
+            <TouchableOpacity
+              style={[styles.exportButton, { backgroundColor: currentTheme.accent }]}
+              onPress={() => setShowExportMenu(!showExportMenu)}
+              disabled={exporting}
+            >
+              {exporting ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <Text style={styles.exportButtonText}>Export</Text>
+                  {!isPremium && <Text style={styles.exportButtonText}> 👑</Text>}
+                </>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.addButton, { backgroundColor: currentTheme.accent }]}
+              onPress={() => {
+                setEditingEntry(null);
+                setEntryText('');
+                setEntryTags('');
+                setModalVisible(true);
+              }}
+            >
+              <Text style={styles.addButtonText}>+ New Entry</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-        <TouchableOpacity
-          style={[styles.addButton, { backgroundColor: currentTheme.accent }]}
-          onPress={() => {
-            setEditingEntry(null);
-            setEntryText('');
-            setSelectedTags([]);
-            setSelectedDate(new Date().toISOString().split('T')[0]);
-            setModalVisible(true);
-          }}
-        >
-          <Text style={styles.addButtonText}>+ New</Text>
-        </TouchableOpacity>
-      </View>
 
-      {/* FREE FEATURE: Search Bar */}
-      <View style={styles.searchSection}>
-        <View style={[styles.searchBar, { backgroundColor: currentTheme.cardBackground }]}>
+        {/* Export Menu Dropdown */}
+        {showExportMenu && (
+          <View style={styles.exportMenu}>
+            <TouchableOpacity
+              style={styles.exportMenuItem}
+              onPress={handleExportPDF}
+            >
+              <Text style={styles.exportMenuText}>
+                📄 Export as PDF
+              </Text>
+              {!isPremium && <Text style={styles.premiumBadge}>👑 Premium</Text>}
+            </TouchableOpacity>
+            <View style={styles.exportMenuDivider} />
+            <TouchableOpacity
+              style={styles.exportMenuItem}
+              onPress={handleExportExcel}
+            >
+              <Text style={styles.exportMenuText}>
+                📊 Export as Spreadsheet
+              </Text>
+              {!isPremium && <Text style={styles.premiumBadge}>👑 Premium</Text>}
+            </TouchableOpacity>
+          </View>
+        )}
+
+        <Text style={[styles.subtitle, { color: currentTheme.textSecondary }]}>
+          Record your spiritual journey
+        </Text>
+
+        {/* Search Bar */}
+        <View style={[styles.searchContainer, { backgroundColor: currentTheme.cardBackground }]}>
           <Text style={styles.searchIcon}>🔍</Text>
           <TextInput
             style={[styles.searchInput, { color: currentTheme.textPrimary }]}
-            placeholder="Search journal entries..."
+            placeholder="Search entries..."
             placeholderTextColor={currentTheme.textSecondary}
             value={searchQuery}
             onChangeText={handleSearch}
           />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => handleSearch('')}>
-              <Text style={[styles.clearButton, { color: currentTheme.textSecondary }]}>✕</Text>
-            </TouchableOpacity>
+          {!isPremium && (
+            <View style={styles.premiumBadgeSmall}>
+              <Text style={styles.premiumBadgeText}>👑</Text>
+            </View>
           )}
         </View>
 
-        <View style={styles.actionButtons}>
-          {/* PREMIUM FEATURE: Tag Filter */}
-          <TouchableOpacity
-            style={[
-              styles.filterButton,
-              { backgroundColor: currentTheme.cardBackground },
-              filterTag && { borderColor: currentTheme.accent, borderWidth: 2 }
-            ]}
-            onPress={() => {
-              if (!isPremium) {
-                setPremiumFeature('Tag filtering');
-                setPremiumModalVisible(true);
-              } else {
-                setShowTagFilter(!showTagFilter);
-              }
-            }}
-          >
-            <Text style={[styles.filterButtonText, { color: currentTheme.textPrimary }]}>
-              🏷️ {isPremium ? 'Filter' : 'Filter 👑'}
-            </Text>
-          </TouchableOpacity>
-
-          {/* PREMIUM FEATURE: Export */}
-          <TouchableOpacity
-            style={[styles.exportButton, { backgroundColor: currentTheme.cardBackground }]}
-            onPress={handleExport}
-          >
-            <Text style={[styles.exportButtonText, { color: currentTheme.textPrimary }]}>
-              📤 {isPremium ? 'Export' : 'Export 👑'}
-            </Text>
-          </TouchableOpacity>
-        </View>
+        {/* Tags */}
+        {allTags.length > 0 && (
+          <View style={styles.tagsContainer}>
+            <FlatList
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              data={allTags}
+              keyExtractor={(item) => item}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[
+                    styles.tagChip,
+                    {
+                      backgroundColor:
+                        selectedTag === item ? currentTheme.accent : currentTheme.cardBackground,
+                    },
+                  ]}
+                  onPress={() => handleTagFilter(item)}
+                >
+                  <Text
+                    style={[
+                      styles.tagChipText,
+                      {
+                        color: selectedTag === item ? '#FFFFFF' : currentTheme.textPrimary,
+                      },
+                    ]}
+                  >
+                    {item}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        )}
       </View>
 
-      {/* PREMIUM FEATURE: Tag Filter Chips */}
-      {showTagFilter && isPremium && (
-        <View style={styles.tagFilterContainer}>
-          <Text style={[styles.tagFilterLabel, { color: currentTheme.textSecondary }]}>
-            Filter by tag:
-          </Text>
-          <View style={styles.tagChips}>
-            {AVAILABLE_TAGS.map(tag => (
-              <TouchableOpacity
-                key={tag}
-                style={[
-                  styles.tagChip,
-                  { backgroundColor: currentTheme.cardBackground },
-                  filterTag === tag && { backgroundColor: currentTheme.accent }
-                ]}
-                onPress={() => handleFilterByTag(tag)}
-              >
-                <Text
-                  style={[
-                    styles.tagChipText,
-                    { color: currentTheme.textPrimary },
-                    filterTag === tag && { color: '#FFFFFF', fontWeight: 'bold' }
-                  ]}
-                >
-                  {tag}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-      )}
-
-      {/* FREE FEATURE: Journal Entries List */}
-      {filteredEntries.length === 0 ? (
-        <View style={[styles.emptyContainer, { backgroundColor: currentTheme.cardBackground }]}>
+      {/* Entries List */}
+      {displayedEntries.length === 0 ? (
+        <View style={styles.emptyContainer}>
           <Text style={[styles.emptyText, { color: currentTheme.textSecondary }]}>
-            {searchQuery || filterTag 
-              ? 'No entries match your search.'
-              : 'No journal entries yet.\nStart documenting your spiritual journey!'}
+            No journal entries yet.{'\n'}Start recording your spiritual journey!
           </Text>
         </View>
       ) : (
         <FlatList
-          data={filteredEntries}
+          data={displayedEntries}
           keyExtractor={(item) => item.id.toString()}
           contentContainerStyle={styles.listContent}
-          renderItem={({ item }) => {
-            const tags = parseTags(item.tags);
-            return (
-              <View style={[styles.entryCard, { backgroundColor: currentTheme.cardBackground }]}>
-                <View style={styles.entryHeader}>
-                  <Text style={[styles.entryDate, { color: currentTheme.accent }]}>
-                    {formatDate(item.date)}
-                  </Text>
-                  <View style={styles.entryActions}>
-                    <TouchableOpacity
-                      onPress={() => handleEditEntry(item)}
-                      style={styles.actionButton}
-                    >
-                      <Text style={[styles.editButton, { color: currentTheme.accent }]}>Edit</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => handleDeleteEntry(item.id)}
-                      style={styles.actionButton}
-                    >
-                      <Text style={styles.deleteButton}>Delete</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                {/* PREMIUM FEATURE: Display Tags */}
-                {tags.length > 0 && (
-                  <View style={styles.tagsContainer}>
-                    {tags.map((tag, index) => (
-                      <View
-                        key={index}
-                        style={[styles.tag, { backgroundColor: currentTheme.accent + '20' }]}
-                      >
-                        <Text style={[styles.tagText, { color: currentTheme.accent }]}>
-                          {tag}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
-
-                <Text style={[styles.entryContent, { color: currentTheme.textPrimary }]}>
-                  {item.content}
+          renderItem={({ item }) => (
+            <View style={[styles.entryCard, { backgroundColor: currentTheme.cardBackground }]}>
+              <View style={styles.entryHeader}>
+                <Text style={[styles.entryDate, { color: currentTheme.accent }]}>
+                  {new Date(item.date).toLocaleDateString('en-US', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                  })}
                 </Text>
+                <View style={styles.entryActions}>
+                  <TouchableOpacity onPress={() => handleEdit(item)}>
+                    <Text style={[styles.actionButton, { color: currentTheme.accent }]}>Edit</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => handleDelete(item)}>
+                    <Text style={styles.deleteButton}>Delete</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-            );
-          }}
+
+              {item.tags && (
+                <View style={styles.entryTags}>
+                  {item.tags.split(',').map((tag, index) => (
+                    <View
+                      key={index}
+                      style={[styles.entryTag, { backgroundColor: currentTheme.colors[1] }]}
+                    >
+                      <Text style={[styles.entryTagText, { color: currentTheme.accent }]}>
+                        {tag.trim()}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              <Text style={[styles.entryContent, { color: currentTheme.textPrimary }]}>
+                {item.content}
+              </Text>
+            </View>
+          )}
         />
       )}
 
@@ -374,67 +390,45 @@ export function JournalScreen() {
         <View style={styles.modalContainer}>
           <View style={[styles.modalContent, { backgroundColor: currentTheme.colors[1] }]}>
             <Text style={[styles.modalTitle, { color: currentTheme.textPrimary }]}>
-              {editingEntry ? 'Edit Entry' : 'New Prayer Journal Entry'}
-            </Text>
-
-            <Text style={[styles.dateLabel, { color: currentTheme.textPrimary }]}>
-              {formatDate(selectedDate)}
+              {editingEntry ? 'Edit Entry' : 'New Entry'}
             </Text>
 
             <TextInput
               style={[
-                styles.textInput,
-                { 
+                styles.textArea,
+                {
                   backgroundColor: currentTheme.cardBackground,
                   color: currentTheme.textPrimary,
-                  borderColor: currentTheme.cardBorder,
-                }
+                },
               ]}
-              placeholder="Write your prayer, reflection, or testimony..."
+              placeholder="What's on your heart today?"
               placeholderTextColor={currentTheme.textSecondary}
-              multiline
-              numberOfLines={10}
               value={entryText}
               onChangeText={setEntryText}
+              multiline
+              numberOfLines={10}
               textAlignVertical="top"
             />
 
-            {/* PREMIUM FEATURE: Tags Selection */}
-            <View style={styles.tagsSection}>
-              <View style={styles.tagsSectionHeader}>
-                <Text style={[styles.tagsLabel, { color: currentTheme.textPrimary }]}>
-                  Tags {!isPremium && '👑'}
-                </Text>
-                {!isPremium && (
-                  <Text style={[styles.premiumHint, { color: currentTheme.textSecondary }]}>
-                    Premium feature
-                  </Text>
-                )}
-              </View>
-              <View style={styles.tagsGrid}>
-                {AVAILABLE_TAGS.map(tag => (
-                  <TouchableOpacity
-                    key={tag}
-                    style={[
-                      styles.tagOption,
-                      { backgroundColor: currentTheme.cardBackground },
-                      selectedTags.includes(tag) && { backgroundColor: currentTheme.accent },
-                      !isPremium && { opacity: 0.5 }
-                    ]}
-                    onPress={() => toggleTag(tag)}
-                  >
-                    <Text
-                      style={[
-                        styles.tagOptionText,
-                        { color: currentTheme.textPrimary },
-                        selectedTags.includes(tag) && { color: '#FFFFFF', fontWeight: 'bold' }
-                      ]}
-                    >
-                      {tag}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+            <View style={styles.tagsInputContainer}>
+              <TextInput
+                style={[
+                  styles.tagsInput,
+                  {
+                    backgroundColor: currentTheme.cardBackground,
+                    color: currentTheme.textPrimary,
+                  },
+                ]}
+                placeholder="Tags (comma separated)"
+                placeholderTextColor={currentTheme.textSecondary}
+                value={entryTags}
+                onChangeText={setEntryTags}
+              />
+              {!isPremium && (
+                <View style={styles.premiumBadgeInput}>
+                  <Text style={styles.premiumBadgeText}>👑 Premium</Text>
+                </View>
+              )}
             </View>
 
             <View style={styles.modalActions}>
@@ -443,9 +437,8 @@ export function JournalScreen() {
                 onPress={() => {
                   setModalVisible(false);
                   setEntryText('');
-                  setSelectedTags([]);
+                  setEntryTags('');
                   setEditingEntry(null);
-                  setSelectedDate(new Date().toISOString().split('T')[0]);
                 }}
               >
                 <Text style={[styles.cancelButtonText, { color: currentTheme.textPrimary }]}>
@@ -454,18 +447,16 @@ export function JournalScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.saveButton, { backgroundColor: currentTheme.accent }]}
-                onPress={handleSaveEntry}
+                onPress={handleSave}
               >
-                <Text style={styles.saveButtonText}>
-                  {editingEntry ? 'Update' : 'Save'}
-                </Text>
+                <Text style={styles.saveButtonText}>Save</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
 
-      {/* Premium Feature Modal */}
+      {/* Premium Modal */}
       <PremiumModal
         visible={premiumModalVisible}
         onClose={() => setPremiumModalVisible(false)}
@@ -480,40 +471,91 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
+    padding: 20,
+    paddingBottom: 10,
+  },
+  headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
-    paddingBottom: 16,
+    marginBottom: 4,
   },
   title: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: 'bold',
   },
-  subtitle: {
+  headerButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  exportButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  exportButtonText: {
+    color: '#FFFFFF',
     fontSize: 14,
-    marginTop: 4,
+    fontWeight: 'bold',
   },
   addButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
     borderRadius: 8,
   },
   addButtonText: {
     color: '#FFFFFF',
-    fontWeight: 'bold',
     fontSize: 14,
+    fontWeight: 'bold',
   },
-  searchSection: {
-    paddingHorizontal: 20,
+  exportMenu: {
+    position: 'absolute',
+    top: 70,
+    right: 90,
+    backgroundColor: '#1A1A2E',
+    borderRadius: 12,
+    padding: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.5,
+    shadowRadius: 12,
+    elevation: 12,
+    zIndex: 1000,
+    minWidth: 240,
+  },
+  exportMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+  },
+  exportMenuText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#FFFFFF',
+  },
+  exportMenuDivider: {
+    height: 1,
+    marginVertical: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  premiumBadge: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#F59E0B',
+  },
+  subtitle: {
+    fontSize: 16,
     marginBottom: 16,
   },
-  searchBar: {
+  searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    padding: 12,
     marginBottom: 12,
   },
   searchIcon: {
@@ -522,78 +564,41 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 16,
   },
-  clearButton: {
-    fontSize: 20,
-    paddingHorizontal: 8,
+  premiumBadgeSmall: {
+    marginLeft: 8,
   },
-  actionButtons: {
-    flexDirection: 'row',
-    gap: 8,
+  premiumBadgeText: {
+    fontSize: 16,
   },
-  filterButton: {
-    flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  filterButtonText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  exportButton: {
-    flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  exportButtonText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  tagFilterContainer: {
-    paddingHorizontal: 20,
-    marginBottom: 16,
-  },
-  tagFilterLabel: {
-    fontSize: 13,
-    marginBottom: 8,
-    fontWeight: '600',
-  },
-  tagChips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+  tagsContainer: {
+    marginBottom: 10,
   },
   tagChip: {
-    paddingVertical: 6,
     paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 16,
+    marginRight: 8,
   },
   tagChipText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '600',
+  },
+  listContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
   },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    marginHorizontal: 20,
-    marginTop: 40,
-    borderRadius: 16,
-    padding: 40,
+    paddingHorizontal: 40,
   },
   emptyText: {
     fontSize: 16,
     textAlign: 'center',
     lineHeight: 24,
-  },
-  listContent: {
-    padding: 20,
-    paddingTop: 0,
   },
   entryCard: {
     borderRadius: 12,
@@ -607,40 +612,35 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   entryDate: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: 'bold',
-    flex: 1,
   },
   entryActions: {
     flexDirection: 'row',
     gap: 12,
   },
   actionButton: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-  },
-  editButton: {
-    fontWeight: '600',
     fontSize: 14,
+    fontWeight: '600',
   },
   deleteButton: {
-    color: '#F87171',
-    fontWeight: '600',
     fontSize: 14,
+    fontWeight: '600',
+    color: '#F87171',
   },
-  tagsContainer: {
+  entryTags: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
     marginBottom: 12,
   },
-  tag: {
-    paddingVertical: 4,
+  entryTag: {
     paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 12,
   },
-  tagText: {
-    fontSize: 11,
+  entryTagText: {
+    fontSize: 12,
     fontWeight: '600',
   },
   entryContent: {
@@ -655,58 +655,35 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     width: '90%',
-    maxHeight: '85%',
     borderRadius: 16,
     padding: 20,
+    maxHeight: '80%',
   },
   modalTitle: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 12,
-  },
-  dateLabel: {
-    fontSize: 14,
-    fontWeight: '600',
     marginBottom: 16,
   },
-  textInput: {
+  textArea: {
     borderRadius: 8,
     padding: 12,
-    fontSize: 15,
-    height: 160,
-    borderWidth: 1,
-    marginBottom: 16,
+    fontSize: 16,
+    marginBottom: 12,
+    minHeight: 200,
   },
-  tagsSection: {
+  tagsInputContainer: {
+    position: 'relative',
     marginBottom: 20,
   },
-  tagsSectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
+  tagsInput: {
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
   },
-  tagsLabel: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  premiumHint: {
-    fontSize: 12,
-    fontStyle: 'italic',
-  },
-  tagsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  tagOption: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-  },
-  tagOptionText: {
-    fontSize: 13,
-    fontWeight: '600',
+  premiumBadgeInput: {
+    position: 'absolute',
+    right: 12,
+    top: 12,
   },
   modalActions: {
     flexDirection: 'row',
