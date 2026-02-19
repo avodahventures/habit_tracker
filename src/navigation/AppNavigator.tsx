@@ -2,78 +2,77 @@ import React from 'react';
 import { Text } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { HabitTrackerScreen } from '../screens/HabitTrackerScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
 import { JournalScreen } from '../screens/JournalScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
+import { PaymentScreen } from '../screens/PaymentScreen';
 import { useTheme } from '../context/ThemeContext';
 
 const Tab = createBottomTabNavigator();
+const Stack = createNativeStackNavigator();
 
-export function AppNavigator() {
+function MainTabs() {
   const { currentTheme } = useTheme();
 
   return (
-    <NavigationContainer>
-      <Tab.Navigator
-        screenOptions={{
-          headerShown: false,
-          tabBarStyle: {
-            backgroundColor: currentTheme.colors[1], // Use theme background
-            borderTopColor: currentTheme.cardBorder, // Use theme border
-            paddingBottom: 5,
-            paddingTop: 5,
-            height: 60,
-          },
-          tabBarActiveTintColor: currentTheme.accent, // Use theme accent
-          tabBarInactiveTintColor: currentTheme.textSecondary, // Use theme text
-          tabBarLabelStyle: {
-            fontSize: 12,
-            fontWeight: '600',
-          },
+    <Tab.Navigator
+      screenOptions={{
+        headerShown: false,
+        tabBarStyle: {
+          backgroundColor: currentTheme.colors[1],
+          borderTopColor: currentTheme.cardBorder,
+        },
+        tabBarActiveTintColor: currentTheme.accent,
+        tabBarInactiveTintColor: currentTheme.textSecondary,
+      }}
+    >
+      <Tab.Screen
+        name="Habits"
+        component={HabitTrackerScreen}
+        options={{
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 24 }}>✅</Text>,
         }}
-      >
-        <Tab.Screen 
-          name="Habits" 
-          component={HabitTrackerScreen}
+      />
+      <Tab.Screen
+        name="Dashboard"
+        component={DashboardScreen}
+        options={{
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 24 }}>📊</Text>,
+        }}
+      />
+      <Tab.Screen
+        name="Journal"
+        component={JournalScreen}
+        options={{
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 24 }}>📖</Text>,
+        }}
+      />
+      <Tab.Screen
+        name="Settings"
+        component={SettingsScreen}
+        options={{
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 24 }}>⚙️</Text>,
+        }}
+      />
+    </Tab.Navigator>
+  );
+}
+
+export function AppNavigator() {
+  return (
+    <NavigationContainer>
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="Main" component={MainTabs} />
+        <Stack.Screen 
+          name="Payment" 
+          component={PaymentScreen}
           options={{
-            tabBarLabel: 'Habits',
-            tabBarIcon: ({ color, size }) => (
-              <Text style={{ fontSize: size, color }}>✅</Text>
-            ),
+            presentation: 'modal',
           }}
         />
-        <Tab.Screen 
-          name="Dashboard" 
-          component={DashboardScreen}
-          options={{
-            tabBarLabel: 'Dashboard',
-            tabBarIcon: ({ color, size }) => (
-              <Text style={{ fontSize: size, color }}>📊</Text>
-            ),
-          }}
-        />
-        <Tab.Screen 
-          name="Journal" 
-          component={JournalScreen}
-          options={{
-            tabBarLabel: 'Journal',
-            tabBarIcon: ({ color, size }) => (
-              <Text style={{ fontSize: size, color }}>📖</Text>
-            ),
-          }}
-        />
-        <Tab.Screen 
-          name="Settings" 
-          component={SettingsScreen}
-          options={{
-            tabBarLabel: 'Settings',
-            tabBarIcon: ({ color, size }) => (
-              <Text style={{ fontSize: size, color }}>⚙️</Text>
-            ),
-          }}
-        />
-      </Tab.Navigator>
+      </Stack.Navigator>
     </NavigationContainer>
   );
 }

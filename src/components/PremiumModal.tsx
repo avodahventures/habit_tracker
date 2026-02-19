@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
+import { useNavigation } from '@react-navigation/native';
 
 interface PremiumModalProps {
   visible: boolean;
@@ -10,51 +11,50 @@ interface PremiumModalProps {
 
 export function PremiumModal({ visible, onClose, feature }: PremiumModalProps) {
   const { currentTheme } = useTheme();
+  const navigation = useNavigation<any>();
+
+  const handleUpgrade = () => {
+    onClose();
+    navigation.navigate('Payment');
+  };
 
   return (
-    <Modal visible={visible} animationType="fade" transparent={true}>
-      <View style={styles.modalContainer}>
-        <View style={[styles.modalContent, { backgroundColor: currentTheme.colors[1] }]}>
-          <Text style={styles.premiumIcon}>👑</Text>
+    <Modal visible={visible} transparent animationType="fade">
+      <View style={styles.overlay}>
+        <View style={[styles.modal, { backgroundColor: currentTheme.cardBackground }]}>
+          <Text style={styles.icon}>👑</Text>
           <Text style={[styles.title, { color: currentTheme.textPrimary }]}>
             Premium Feature
           </Text>
           <Text style={[styles.message, { color: currentTheme.textSecondary }]}>
-            {feature} is a premium feature.{'\n\n'}
-            Upgrade to unlock:
+            {feature} is a premium feature.{'\n'}
+            Upgrade to unlock this and many more!
           </Text>
 
-          <View style={styles.featureList}>
+          <View style={styles.features}>
             <Text style={[styles.featureItem, { color: currentTheme.textPrimary }]}>
-              ✓ Tag and filter journal entries
+              ✓ Prayer Journal with Tags
             </Text>
             <Text style={[styles.featureItem, { color: currentTheme.textPrimary }]}>
-              ✓ Export as PDF or spreadsheet
+              ✓ Advanced Analytics
             </Text>
             <Text style={[styles.featureItem, { color: currentTheme.textPrimary }]}>
-              ✓ Advanced search and filtering
+              ✓ Export to PDF & Excel
             </Text>
             <Text style={[styles.featureItem, { color: currentTheme.textPrimary }]}>
-              ✓ Unlimited journal entries
+              ✓ Search & Filter
             </Text>
           </View>
 
           <TouchableOpacity
             style={[styles.upgradeButton, { backgroundColor: currentTheme.accent }]}
-            onPress={() => {
-              // TODO: Implement in-app purchase
-              alert('Coming soon! In-app purchase will be implemented here.');
-              onClose();
-            }}
+            onPress={handleUpgrade}
           >
             <Text style={styles.upgradeButtonText}>Upgrade to Premium</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.closeButton, { backgroundColor: currentTheme.cardBackground }]}
-            onPress={onClose}
-          >
-            <Text style={[styles.closeButtonText, { color: currentTheme.textPrimary }]}>
+          <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+            <Text style={[styles.closeButtonText, { color: currentTheme.textSecondary }]}>
               Maybe Later
             </Text>
           </TouchableOpacity>
@@ -65,20 +65,22 @@ export function PremiumModal({ visible, onClose, feature }: PremiumModalProps) {
 }
 
 const styles = StyleSheet.create({
-  modalContainer: {
+  overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 20,
   },
-  modalContent: {
-    width: '85%',
+  modal: {
     borderRadius: 20,
     padding: 24,
+    width: '100%',
+    maxWidth: 400,
     alignItems: 'center',
   },
-  premiumIcon: {
-    fontSize: 60,
+  icon: {
+    fontSize: 48,
     marginBottom: 16,
   },
   title: {
@@ -89,21 +91,21 @@ const styles = StyleSheet.create({
   message: {
     fontSize: 16,
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
     lineHeight: 24,
   },
-  featureList: {
+  features: {
     width: '100%',
     marginBottom: 24,
   },
   featureItem: {
     fontSize: 15,
-    marginBottom: 10,
+    marginBottom: 8,
     paddingLeft: 8,
   },
   upgradeButton: {
     width: '100%',
-    paddingVertical: 14,
+    padding: 16,
     borderRadius: 12,
     alignItems: 'center',
     marginBottom: 12,
@@ -114,13 +116,9 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   closeButton: {
-    width: '100%',
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
+    padding: 8,
   },
   closeButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 14,
   },
 });
