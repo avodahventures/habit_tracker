@@ -13,28 +13,18 @@ import { useTheme } from '../context/ThemeContext';
 import { usePremium } from '../context/PremiumContext';
 import { useNavigation } from '@react-navigation/native';
 
-type SubscriptionPlan = 'monthly' | 'yearly';
-
 export function PaymentScreen() {
   const { currentTheme } = useTheme();
   const { setPremium } = usePremium();
   const navigation = useNavigation();
-  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>('yearly');
   const [processing, setProcessing] = useState(false);
 
-  const plans = {
-    monthly: {
-      price: '$4.99',
-      period: 'month',
-      billingCycle: 'Billed monthly',
-      savings: null,
-    },
-    yearly: {
-      price: '$39.99',
-      period: 'year',
-      billingCycle: 'Billed annually',
-      savings: 'Save 33%',
-    },
+  // Monthly plan is the only option shown
+  const plan = {
+    price: '$4.99',
+    period: 'month',
+    billingCycle: 'Billed monthly',
+    entitlementId: 'faith_premium',
   };
 
   const features = [
@@ -77,7 +67,7 @@ export function PaymentScreen() {
     setTimeout(() => {
       Alert.alert(
         'Success! 🎉',
-        `You're now a Premium member! Enjoy all the features.`,
+        `You now have access to ${plan.entitlementId}! Enjoy all the features.`,
         [
           {
             text: 'Start Using Premium',
@@ -92,6 +82,7 @@ export function PaymentScreen() {
     }, 2000);
 
     // TODO: Integrate with actual payment provider
+    // When integrating, use plan.entitlementId = 'faith_premium'
     // Examples: Stripe, RevenueCat, Apple/Google In-App Purchases
   };
 
@@ -105,6 +96,7 @@ export function PaymentScreen() {
           text: 'Restore',
           onPress: () => {
             // TODO: Implement actual restore logic
+            // Check for 'faith_premium' entitlement
             Alert.alert('Info', 'No previous purchases found.');
           },
         },
@@ -133,80 +125,35 @@ export function PaymentScreen() {
           </Text>
         </View>
 
-        {/* Plan Selection */}
-        <View style={styles.plansContainer}>
-          <TouchableOpacity
+        {/* Single Plan Display */}
+        <View style={styles.planContainer}>
+          <View
             style={[
               styles.planCard,
               {
                 backgroundColor: currentTheme.cardBackground,
-                borderColor: selectedPlan === 'monthly' ? currentTheme.accent : 'transparent',
+                borderColor: currentTheme.accent,
                 borderWidth: 2,
               },
             ]}
-            onPress={() => setSelectedPlan('monthly')}
           >
-            <View style={styles.planHeader}>
-              <View>
-                <Text style={[styles.planPeriod, { color: currentTheme.textPrimary }]}>
-                  Monthly
-                </Text>
-                <Text style={[styles.planBilling, { color: currentTheme.textSecondary }]}>
-                  {plans.monthly.billingCycle}
+            <View style={styles.planContent}>
+              <View style={styles.planHeader}>
+                <Text style={[styles.planPrice, { color: currentTheme.accent }]}>
+                  {plan.price}
+                  <Text style={[styles.planPriceUnit, { color: currentTheme.textSecondary }]}>
+                    /{plan.period}
+                  </Text>
                 </Text>
               </View>
-              <Text style={[styles.planPrice, { color: currentTheme.accent }]}>
-                {plans.monthly.price}
-                <Text style={[styles.planPriceUnit, { color: currentTheme.textSecondary }]}>
-                  /{plans.monthly.period}
-                </Text>
+              <Text style={[styles.planBilling, { color: currentTheme.textSecondary }]}>
+                {plan.billingCycle}
+              </Text>
+              <Text style={[styles.planDescription, { color: currentTheme.textSecondary }]}>
+                Cancel anytime
               </Text>
             </View>
-            {selectedPlan === 'monthly' && (
-              <View style={[styles.selectedBadge, { backgroundColor: currentTheme.accent }]}>
-                <Text style={styles.selectedBadgeText}>✓ Selected</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.planCard,
-              {
-                backgroundColor: currentTheme.cardBackground,
-                borderColor: selectedPlan === 'yearly' ? currentTheme.accent : 'transparent',
-                borderWidth: 2,
-              },
-            ]}
-            onPress={() => setSelectedPlan('yearly')}
-          >
-            {plans.yearly.savings && (
-              <View style={[styles.savingsBadge, { backgroundColor: '#22C55E' }]}>
-                <Text style={styles.savingsBadgeText}>{plans.yearly.savings}</Text>
-              </View>
-            )}
-            <View style={styles.planHeader}>
-              <View>
-                <Text style={[styles.planPeriod, { color: currentTheme.textPrimary }]}>
-                  Yearly
-                </Text>
-                <Text style={[styles.planBilling, { color: currentTheme.textSecondary }]}>
-                  {plans.yearly.billingCycle}
-                </Text>
-              </View>
-              <Text style={[styles.planPrice, { color: currentTheme.accent }]}>
-                {plans.yearly.price}
-                <Text style={[styles.planPriceUnit, { color: currentTheme.textSecondary }]}>
-                  /{plans.yearly.period}
-                </Text>
-              </Text>
-            </View>
-            {selectedPlan === 'yearly' && (
-              <View style={[styles.selectedBadge, { backgroundColor: currentTheme.accent }]}>
-                <Text style={styles.selectedBadgeText}>✓ Selected</Text>
-              </View>
-            )}
-          </TouchableOpacity>
+          </View>
         </View>
 
         {/* Features List */}
@@ -234,8 +181,8 @@ export function PaymentScreen() {
 
         {/* Terms */}
         <Text style={[styles.terms, { color: currentTheme.textSecondary }]}>
-          Cancel anytime. Subscription automatically renews unless cancelled at least 24 hours
-          before the end of the current period.
+          Subscription automatically renews unless cancelled at least 24 hours before the end of
+          the current period. You can cancel anytime in your account settings.
         </Text>
       </ScrollView>
 
@@ -259,7 +206,7 @@ export function PaymentScreen() {
             <ActivityIndicator color="#FFFFFF" />
           ) : (
             <Text style={styles.purchaseButtonText}>
-              Subscribe for {plans[selectedPlan].price}/{plans[selectedPlan].period}
+              Subscribe for {plan.price}/{plan.period}
             </Text>
           )}
         </TouchableOpacity>
@@ -304,60 +251,33 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: 20,
   },
-  plansContainer: {
+  planContainer: {
     paddingHorizontal: 20,
-    gap: 12,
     marginTop: 24,
   },
   planCard: {
     borderRadius: 16,
-    padding: 20,
-    position: 'relative',
+    padding: 24,
   },
-  savingsBadge: {
-    position: 'absolute',
-    top: -8,
-    right: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  savingsBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  planHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  planContent: {
     alignItems: 'center',
   },
-  planPeriod: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  planBilling: {
-    fontSize: 14,
+  planHeader: {
+    marginBottom: 8,
   },
   planPrice: {
-    fontSize: 28,
+    fontSize: 48,
     fontWeight: 'bold',
   },
   planPriceUnit: {
+    fontSize: 20,
+  },
+  planBilling: {
     fontSize: 16,
+    marginBottom: 4,
   },
-  selectedBadge: {
-    marginTop: 12,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    alignSelf: 'flex-start',
-  },
-  selectedBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: 'bold',
+  planDescription: {
+    fontSize: 14,
   },
   featuresContainer: {
     paddingHorizontal: 20,
