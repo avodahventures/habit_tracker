@@ -102,7 +102,10 @@ export function JournalScreen() {
       return;
     }
 
+    // Only check premium for tags if user is actually trying to use them
     if (entryTags.trim() && !isPremium) {
+      // Clear the tags field so user can save without them
+      setEntryTags('');
       setPremiumFeature('Journal Tags');
       setPremiumModalVisible(true);
       return;
@@ -131,7 +134,14 @@ export function JournalScreen() {
   const handleEdit = (entry: JournalEntry) => {
     setEditingEntry(entry);
     setEntryText(entry.content);
-    setEntryTags(entry.tags);
+    
+    // If premium, show existing tags; if not premium, clear tags
+    if (isPremium) {
+      setEntryTags(entry.tags);
+    } else {
+      setEntryTags('');
+    }
+    
     setModalVisible(true);
   };
 
@@ -423,6 +433,7 @@ export function JournalScreen() {
                 placeholderTextColor={currentTheme.textSecondary}
                 value={entryTags}
                 onChangeText={setEntryTags}
+                editable={isPremium} // Only editable if premium
               />
               {!isPremium && (
                 <View style={styles.premiumBadgeInput}>
