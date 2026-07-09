@@ -1,0 +1,39 @@
+{
+  "" : {
+    "diagnostics" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/FaithHabitTracker.build/Release-iphoneos/FaithHabitTracker.build/Objects-normal/arm64/FaithHabitTracker-primary.dia",
+    "emit-module-dependencies" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/FaithHabitTracker.build/Release-iphoneos/FaithHabitTracker.build/Objects-normal/arm64/FaithHabitTracker-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/FaithHabitTracker.build/Release-iphoneos/FaithHabitTracker.build/Objects-normal/arm64/FaithHabitTracker-primary-emit-module.dia",
+    "pch" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/FaithHabitTracker.build/Release-iphoneos/FaithHabitTracker.build/Objects-normal/arm64/FaithHabitTracker-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/FaithHabitTracker.build/Release-iphoneos/FaithHabitTracker.build/Objects-normal/arm64/FaithHabitTracker-primary.swiftdeps"
+  },
+  "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/FaithHabitTracker.build/Release-iphoneos/FaithHabitTracker.build/DerivedSources/GeneratedAssetSymbols.swift" : {
+    "const-values" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/FaithHabitTracker.build/Release-iphoneos/FaithHabitTracker.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftconstvalues",
+    "dependencies" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/FaithHabitTracker.build/Release-iphoneos/FaithHabitTracker.build/Objects-normal/arm64/GeneratedAssetSymbols.d",
+    "diagnostics" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/FaithHabitTracker.build/Release-iphoneos/FaithHabitTracker.build/Objects-normal/arm64/GeneratedAssetSymbols.dia",
+    "index-unit-output-path" : "/FaithHabitTracker.build/Release-iphoneos/FaithHabitTracker.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "llvm-bc" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/FaithHabitTracker.build/Release-iphoneos/FaithHabitTracker.build/Objects-normal/arm64/GeneratedAssetSymbols.bc",
+    "object" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/FaithHabitTracker.build/Release-iphoneos/FaithHabitTracker.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "swift-dependencies" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/FaithHabitTracker.build/Release-iphoneos/FaithHabitTracker.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftdeps",
+    "swiftmodule" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/FaithHabitTracker.build/Release-iphoneos/FaithHabitTracker.build/Objects-normal/arm64/GeneratedAssetSymbols~partial.swiftmodule"
+  },
+  "/Users/hannah-macbook/MyApp/habit_tracker/ios/FaithHabitTracker/AppDelegate.swift" : {
+    "const-values" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/FaithHabitTracker.build/Release-iphoneos/FaithHabitTracker.build/Objects-normal/arm64/AppDelegate.swiftconstvalues",
+    "dependencies" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/FaithHabitTracker.build/Release-iphoneos/FaithHabitTracker.build/Objects-normal/arm64/AppDelegate.d",
+    "diagnostics" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/FaithHabitTracker.build/Release-iphoneos/FaithHabitTracker.build/Objects-normal/arm64/AppDelegate.dia",
+    "index-unit-output-path" : "/FaithHabitTracker.build/Release-iphoneos/FaithHabitTracker.build/Objects-normal/arm64/AppDelegate.o",
+    "llvm-bc" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/FaithHabitTracker.build/Release-iphoneos/FaithHabitTracker.build/Objects-normal/arm64/AppDelegate.bc",
+    "object" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/FaithHabitTracker.build/Release-iphoneos/FaithHabitTracker.build/Objects-normal/arm64/AppDelegate.o",
+    "swift-dependencies" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/FaithHabitTracker.build/Release-iphoneos/FaithHabitTracker.build/Objects-normal/arm64/AppDelegate.swiftdeps",
+    "swiftmodule" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/FaithHabitTracker.build/Release-iphoneos/FaithHabitTracker.build/Objects-normal/arm64/AppDelegate~partial.swiftmodule"
+  },
+  "/Users/hannah-macbook/MyApp/habit_tracker/ios/Pods/Target Support Files/Pods-FaithHabitTracker/ExpoModulesProvider.swift" : {
+    "const-values" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/FaithHabitTracker.build/Release-iphoneos/FaithHabitTracker.build/Objects-normal/arm64/ExpoModulesProvider.swiftconstvalues",
+    "dependencies" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/FaithHabitTracker.build/Release-iphoneos/FaithHabitTracker.build/Objects-normal/arm64/ExpoModulesProvider.d",
+    "diagnostics" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/FaithHabitTracker.build/Release-iphoneos/FaithHabitTracker.build/Objects-normal/arm64/ExpoModulesProvider.dia",
+    "index-unit-output-path" : "/FaithHabitTracker.build/Release-iphoneos/FaithHabitTracker.build/Objects-normal/arm64/ExpoModulesProvider.o",
+    "llvm-bc" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/FaithHabitTracker.build/Release-iphoneos/FaithHabitTracker.build/Objects-normal/arm64/ExpoModulesProvider.bc",
+    "object" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/FaithHabitTracker.build/Release-iphoneos/FaithHabitTracker.build/Objects-normal/arm64/ExpoModulesProvider.o",
+    "swift-dependencies" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/FaithHabitTracker.build/Release-iphoneos/FaithHabitTracker.build/Objects-normal/arm64/ExpoModulesProvider.swiftdeps",
+    "swiftmodule" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/FaithHabitTracker.build/Release-iphoneos/FaithHabitTracker.build/Objects-normal/arm64/ExpoModulesProvider~partial.swiftmodule"
+  }
+}

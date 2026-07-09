@@ -1,0 +1,46 @@
+{
+  "" : {
+    "const-values" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/Pods.build/Release-iphoneos/ExpoFont.build/Objects-normal/arm64/ExpoFont-primary.swiftconstvalues",
+    "dependencies" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/Pods.build/Release-iphoneos/ExpoFont.build/Objects-normal/arm64/ExpoFont-primary.d",
+    "diagnostics" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/Pods.build/Release-iphoneos/ExpoFont.build/Objects-normal/arm64/ExpoFont-primary.dia",
+    "emit-module-dependencies" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/Pods.build/Release-iphoneos/ExpoFont.build/Objects-normal/arm64/ExpoFont-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/Pods.build/Release-iphoneos/ExpoFont.build/Objects-normal/arm64/ExpoFont-primary-emit-module.dia",
+    "pch" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/Pods.build/Release-iphoneos/ExpoFont.build/Objects-normal/arm64/ExpoFont-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/Pods.build/Release-iphoneos/ExpoFont.build/Objects-normal/arm64/ExpoFont-primary.swiftdeps"
+  },
+  "/Users/hannah-macbook/MyApp/habit_tracker/node_modules/expo/node_modules/expo-font/ios/FontExceptions.swift" : {
+    "index-unit-output-path" : "/Pods.build/Release-iphoneos/ExpoFont.build/Objects-normal/arm64/FontExceptions.o",
+    "llvm-bc" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/Pods.build/Release-iphoneos/ExpoFont.build/Objects-normal/arm64/FontExceptions.bc",
+    "object" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/Pods.build/Release-iphoneos/ExpoFont.build/Objects-normal/arm64/FontExceptions.o"
+  },
+  "/Users/hannah-macbook/MyApp/habit_tracker/node_modules/expo/node_modules/expo-font/ios/FontFamilyAliasManager.swift" : {
+    "index-unit-output-path" : "/Pods.build/Release-iphoneos/ExpoFont.build/Objects-normal/arm64/FontFamilyAliasManager.o",
+    "llvm-bc" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/Pods.build/Release-iphoneos/ExpoFont.build/Objects-normal/arm64/FontFamilyAliasManager.bc",
+    "object" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/Pods.build/Release-iphoneos/ExpoFont.build/Objects-normal/arm64/FontFamilyAliasManager.o"
+  },
+  "/Users/hannah-macbook/MyApp/habit_tracker/node_modules/expo/node_modules/expo-font/ios/FontLoaderModule.swift" : {
+    "index-unit-output-path" : "/Pods.build/Release-iphoneos/ExpoFont.build/Objects-normal/arm64/FontLoaderModule.o",
+    "llvm-bc" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/Pods.build/Release-iphoneos/ExpoFont.build/Objects-normal/arm64/FontLoaderModule.bc",
+    "object" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/Pods.build/Release-iphoneos/ExpoFont.build/Objects-normal/arm64/FontLoaderModule.o"
+  },
+  "/Users/hannah-macbook/MyApp/habit_tracker/node_modules/expo/node_modules/expo-font/ios/FontUtils.swift" : {
+    "index-unit-output-path" : "/Pods.build/Release-iphoneos/ExpoFont.build/Objects-normal/arm64/FontUtils.o",
+    "llvm-bc" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/Pods.build/Release-iphoneos/ExpoFont.build/Objects-normal/arm64/FontUtils.bc",
+    "object" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/Pods.build/Release-iphoneos/ExpoFont.build/Objects-normal/arm64/FontUtils.o"
+  },
+  "/Users/hannah-macbook/MyApp/habit_tracker/node_modules/expo/node_modules/expo-font/ios/FontUtilsModule.swift" : {
+    "index-unit-output-path" : "/Pods.build/Release-iphoneos/ExpoFont.build/Objects-normal/arm64/FontUtilsModule.o",
+    "llvm-bc" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/Pods.build/Release-iphoneos/ExpoFont.build/Objects-normal/arm64/FontUtilsModule.bc",
+    "object" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/Pods.build/Release-iphoneos/ExpoFont.build/Objects-normal/arm64/FontUtilsModule.o"
+  },
+  "/Users/hannah-macbook/MyApp/habit_tracker/node_modules/expo/node_modules/expo-font/ios/FontUtilsRecords.swift" : {
+    "index-unit-output-path" : "/Pods.build/Release-iphoneos/ExpoFont.build/Objects-normal/arm64/FontUtilsRecords.o",
+    "llvm-bc" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/Pods.build/Release-iphoneos/ExpoFont.build/Objects-normal/arm64/FontUtilsRecords.bc",
+    "object" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/Pods.build/Release-iphoneos/ExpoFont.build/Objects-normal/arm64/FontUtilsRecords.o"
+  },
+  "/Users/hannah-macbook/MyApp/habit_tracker/node_modules/expo/node_modules/expo-font/ios/UIFont+FontFamilyAlias.swift" : {
+    "index-unit-output-path" : "/Pods.build/Release-iphoneos/ExpoFont.build/Objects-normal/arm64/UIFont+FontFamilyAlias.o",
+    "llvm-bc" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/Pods.build/Release-iphoneos/ExpoFont.build/Objects-normal/arm64/UIFont+FontFamilyAlias.bc",
+    "object" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/Pods.build/Release-iphoneos/ExpoFont.build/Objects-normal/arm64/UIFont+FontFamilyAlias.o"
+  }
+}

@@ -1,0 +1,5 @@
+ extern const unsigned char FaithHabitTrackerVersionString[];
+ extern const double FaithHabitTrackerVersionNumber;
+
+ const unsigned char FaithHabitTrackerVersionString[] __attribute__ ((used)) = "@(#)PROGRAM:FaithHabitTracker  PROJECT:FaithHabitTracker-1" "\n";
+ const double FaithHabitTrackerVersionNumber __attribute__ ((used)) = (double)1.;

@@ -1,0 +1,26 @@
+{
+  "" : {
+    "const-values" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/Pods.build/Release-iphoneos/ExpoLinearGradient.build/Objects-normal/arm64/ExpoLinearGradient-primary.swiftconstvalues",
+    "dependencies" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/Pods.build/Release-iphoneos/ExpoLinearGradient.build/Objects-normal/arm64/ExpoLinearGradient-primary.d",
+    "diagnostics" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/Pods.build/Release-iphoneos/ExpoLinearGradient.build/Objects-normal/arm64/ExpoLinearGradient-primary.dia",
+    "emit-module-dependencies" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/Pods.build/Release-iphoneos/ExpoLinearGradient.build/Objects-normal/arm64/ExpoLinearGradient-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/Pods.build/Release-iphoneos/ExpoLinearGradient.build/Objects-normal/arm64/ExpoLinearGradient-primary-emit-module.dia",
+    "pch" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/Pods.build/Release-iphoneos/ExpoLinearGradient.build/Objects-normal/arm64/ExpoLinearGradient-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/Pods.build/Release-iphoneos/ExpoLinearGradient.build/Objects-normal/arm64/ExpoLinearGradient-primary.swiftdeps"
+  },
+  "/Users/hannah-macbook/MyApp/habit_tracker/node_modules/expo-linear-gradient/ios/LinearGradientLayer.swift" : {
+    "index-unit-output-path" : "/Pods.build/Release-iphoneos/ExpoLinearGradient.build/Objects-normal/arm64/LinearGradientLayer.o",
+    "llvm-bc" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/Pods.build/Release-iphoneos/ExpoLinearGradient.build/Objects-normal/arm64/LinearGradientLayer.bc",
+    "object" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/Pods.build/Release-iphoneos/ExpoLinearGradient.build/Objects-normal/arm64/LinearGradientLayer.o"
+  },
+  "/Users/hannah-macbook/MyApp/habit_tracker/node_modules/expo-linear-gradient/ios/LinearGradientModule.swift" : {
+    "index-unit-output-path" : "/Pods.build/Release-iphoneos/ExpoLinearGradient.build/Objects-normal/arm64/LinearGradientModule.o",
+    "llvm-bc" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/Pods.build/Release-iphoneos/ExpoLinearGradient.build/Objects-normal/arm64/LinearGradientModule.bc",
+    "object" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/Pods.build/Release-iphoneos/ExpoLinearGradient.build/Objects-normal/arm64/LinearGradientModule.o"
+  },
+  "/Users/hannah-macbook/MyApp/habit_tracker/node_modules/expo-linear-gradient/ios/LinearGradientView.swift" : {
+    "index-unit-output-path" : "/Pods.build/Release-iphoneos/ExpoLinearGradient.build/Objects-normal/arm64/LinearGradientView.o",
+    "llvm-bc" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/Pods.build/Release-iphoneos/ExpoLinearGradient.build/Objects-normal/arm64/LinearGradientView.bc",
+    "object" : "/Users/hannah-macbook/MyApp/habit_tracker/build/Build/Intermediates.noindex/Pods.build/Release-iphoneos/ExpoLinearGradient.build/Objects-normal/arm64/LinearGradientView.o"
+  }
+}
