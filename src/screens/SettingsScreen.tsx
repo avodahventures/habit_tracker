@@ -1,69 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Modal, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
 import { usePremium } from '../context/PremiumContext';
 import { themes, ThemeType } from '../utils/themes';
 import { db, Habit } from '../database/database';
-
-interface DefaultHabit {
-  id: string;
-  name: string;
-  description: string;
-  icon: string;
-}
-
-const DEFAULT_HABITS: DefaultHabit[] = [
-  {
-    id: 'morning-prayer',
-    name: 'Morning Prayer',
-    description: 'Start the day with God',
-    icon: '🙏',
-  },
-  {
-    id: 'read-bible',
-    name: 'Read the Bible',
-    description: 'Daily verse or short passage',
-    icon: '📖',
-  },
-  {
-    id: 'evening-reflection',
-    name: 'Evening Reflection / Gratitude',
-    description: 'Thank God for today',
-    icon: '🌙',
-  },
-  {
-    id: 'memorize-verse',
-    name: 'Memorize a Verse',
-    description: 'Optional weekly goal - Keeps Scripture central without pressure',
-    icon: '💭',
-  },
-  {
-    id: 'family-time',
-    name: 'Family Time',
-    description: 'Prayer, conversation, or shared activity',
-    icon: '👨‍👩‍👧‍👦',
-  },
-  {
-    id: 'practice-kindness',
-    name: 'Practice Kindness',
-    description: 'Encourage someone / show Christ\'s love',
-    icon: '💝',
-  },
-  {
-    id: 'serve-others',
-    name: 'Serve Others',
-    description: 'Simple acts — helping, checking in, giving',
-    icon: '🤝',
-  },
-  {
-    id: 'health-stewardship',
-    name: 'Health Stewardship',
-    description: 'Walk, stretch, hydrate — caring for God\'s temple',
-    icon: '💪',
-  },
-];
+import { DEFAULT_HABITS, DefaultHabit } from '../utils/defaultHabits';
 
 const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -71,7 +15,6 @@ export function SettingsScreen() {
   const { currentTheme, themeType, setTheme } = useTheme();
   const { isPremium, setPremium } = usePremium();
   const [habits, setHabits] = useState<Habit[]>([]);
-  const [selectedDefaultHabits, setSelectedDefaultHabits] = useState<Set<string>>(new Set());
   const [modalVisible, setModalVisible] = useState(false);
   const [frequencyModalVisible, setFrequencyModalVisible] = useState(false);
   const [weekdayModalVisible, setWeekdayModalVisible] = useState(false);
@@ -85,10 +28,11 @@ export function SettingsScreen() {
   const [habitsExpanded, setHabitsExpanded] = useState(true);
   const [premiumExpanded, setPremiumExpanded] = useState(false);
 
-  useEffect(() => {
-    loadHabits();
-    loadSelectedDefaultHabits();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      loadHabits();
+    }, [])
+  );
 
   const loadHabits = async () => {
     try {
@@ -99,45 +43,16 @@ export function SettingsScreen() {
     }
   };
 
-  const loadSelectedDefaultHabits = async () => {
-    try {
-      const stored = await AsyncStorage.getItem('selectedDefaultHabits');
-      if (stored) {
-        setSelectedDefaultHabits(new Set(JSON.parse(stored)));
-      }
-    } catch (error) {
-      console.error('Error loading selected default habits:', error);
-    }
-  };
-
-  const saveSelectedDefaultHabits = async (selected: Set<string>) => {
-    try {
-      await AsyncStorage.setItem('selectedDefaultHabits', JSON.stringify(Array.from(selected)));
-    } catch (error) {
-      console.error('Error saving selected default habits:', error);
-    }
-  };
-
   const toggleDefaultHabit = async (defaultHabit: DefaultHabit) => {
-    const newSelected = new Set(selectedDefaultHabits);
-    
-    if (newSelected.has(defaultHabit.id)) {
-      // Remove from selected and delete from database
-      newSelected.delete(defaultHabit.id);
-      
-      // Find and delete the habit from database
-      const existingHabit = habits.find(h => h.name === defaultHabit.name);
-      if (existingHabit) {
-        try {
-          await db.deleteHabit(existingHabit.id);
-          await loadHabits();
-        } catch (error) {
-          console.error('Error deleting habit:', error);
-        }
+    const existingHabit = habits.find(h => h.name === defaultHabit.name);
+
+    if (existingHabit) {
+      try {
+        await db.deleteHabit(existingHabit.id);
+        await loadHabits();
+      } catch (error) {
+        console.error('Error deleting habit:', error);
       }
-      
-      setSelectedDefaultHabits(newSelected);
-      await saveSelectedDefaultHabits(newSelected);
     } else {
       // Show frequency selection dialog
       setPendingHabit({ name: defaultHabit.name, icon: defaultHabit.icon });
@@ -173,15 +88,6 @@ export function SettingsScreen() {
         frequency: selectedFrequency,
         weekday: selectedFrequency === 'weekly' ? selectedWeekday : undefined,
       });
-
-      // Update selected default habits if it was a default habit
-      const defaultHabit = DEFAULT_HABITS.find(dh => dh.name === pendingHabit.name);
-      if (defaultHabit) {
-        const newSelected = new Set(selectedDefaultHabits);
-        newSelected.add(defaultHabit.id);
-        setSelectedDefaultHabits(newSelected);
-        await saveSelectedDefaultHabits(newSelected);
-      }
 
       await loadHabits();
       setPendingHabit(null);
@@ -219,16 +125,6 @@ export function SettingsScreen() {
           onPress: async () => {
             try {
               await db.deleteHabit(id);
-              
-              // If it was a default habit, remove from selected
-              const defaultHabit = DEFAULT_HABITS.find(dh => dh.name === name);
-              if (defaultHabit) {
-                const newSelected = new Set(selectedDefaultHabits);
-                newSelected.delete(defaultHabit.id);
-                setSelectedDefaultHabits(newSelected);
-                await saveSelectedDefaultHabits(newSelected);
-              }
-              
               loadHabits();
             } catch (error) {
               console.error('Error deleting habit:', error);
@@ -276,9 +172,15 @@ export function SettingsScreen() {
   };
 
   // Separate custom habits (not in default list)
-  const customHabits = habits.filter(
-    habit => !DEFAULT_HABITS.some(dh => dh.name === habit.name)
-  );
+  // Any habit not shown under a Default Habits row - includes non-default
+  // names as well as duplicate habits that happen to share a default's name
+  // (e.g. a habit added twice under the same name), so nothing is hidden.
+  const customHabits = habits.filter(habit => {
+    const isDefaultName = DEFAULT_HABITS.some(dh => dh.name === habit.name);
+    if (!isDefaultName) return true;
+    const firstMatch = habits.find(h => h.name === habit.name);
+    return firstMatch?.id !== habit.id;
+  });
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: currentTheme.colors[0] }]}>
@@ -439,7 +341,7 @@ export function SettingsScreen() {
           >
             <View style={styles.sectionHeaderLeft}>
               <Text style={[styles.sectionTitle, { color: currentTheme.textPrimary }]}>
-                ✅ My Habits
+                ✅ My Habits Manager
               </Text>
               <View style={[styles.badge, { backgroundColor: currentTheme.accent }]}>
                 <Text style={styles.badgeText}>{habits.length}</Text>
@@ -474,12 +376,12 @@ export function SettingsScreen() {
                           style={[
                             styles.defaultCheckbox,
                             { borderColor: currentTheme.accent },
-                            selectedDefaultHabits.has(defaultHabit.id) && {
+                            !!existingHabit && {
                               backgroundColor: currentTheme.accent,
                             },
                           ]}
                         >
-                          {selectedDefaultHabits.has(defaultHabit.id) && (
+                          {!!existingHabit && (
                             <Text style={styles.checkmark}>✓</Text>
                           )}
                         </View>

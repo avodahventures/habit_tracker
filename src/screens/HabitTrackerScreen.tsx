@@ -9,11 +9,12 @@ import {
   Linking,
   AppState,
   AppStateStatus,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
 import { db, Habit } from '../database/database';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import {
   checkHabitsAndNotify,
   getMiniCelebrationMessage,
@@ -73,6 +74,7 @@ function getNotificationShownKey(hour: number): string {
 
 export function HabitTrackerScreen() {
   const { currentTheme } = useTheme();
+  const navigation = useNavigation();
   const [dailyHabits, setDailyHabits] = useState<HabitWithCompletion[]>([]);
   const [weeklyHabits, setWeeklyHabits] = useState<HabitWithCompletion[]>([]);
   const [loading, setLoading] = useState(true);
@@ -353,6 +355,17 @@ export function HabitTrackerScreen() {
     }
   };
 
+  const showManageHabitsInfo = () => {
+    Alert.alert(
+      'Manage Habits',
+      'To add or edit habits, go to Settings and tap "My Habits Manager".',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Go to Settings', onPress: () => navigation.navigate('Settings' as never) },
+      ]
+    );
+  };
+
   const getHabitFrequencyText = (habit: Habit): string => {
     if (habit.frequency === 'daily') {
       return 'Daily';
@@ -466,16 +479,23 @@ export function HabitTrackerScreen() {
   return (
     <View style={[styles.container, { backgroundColor: currentTheme.colors[0] }]}>
       <SafeAreaView style={styles.safeArea}>
+        {/* Header with Manage Habits Info Button */}
         <View style={styles.header}>
           <Text style={[styles.title, { color: currentTheme.textPrimary }]}>
             Today's Habits
           </Text>
+          <TouchableOpacity
+            style={styles.infoButton}
+            onPress={showManageHabitsInfo}
+          >
+            <Text style={styles.infoButtonIcon}>💡</Text>
+          </TouchableOpacity>
         </View>
 
         {hasNoHabits ? (
           <View style={styles.emptyContainer}>
             <Text style={[styles.emptyText, { color: currentTheme.textSecondary }]}>
-              No habits yet.{'\n'}Add some in Settings!
+              No habits yet.{'\n'}Go to Settings → My Habits Manager to add some!
             </Text>
           </View>
         ) : (
@@ -598,11 +618,25 @@ const styles = StyleSheet.create({
   header: {
     padding: 20,
     paddingBottom: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    marginBottom: 4,
+    marginBottom: 0,
+    flex: 1,
+  },
+  infoButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  infoButtonIcon: {
+    fontSize: 24,
   },
   section: {
     marginBottom: 24,
