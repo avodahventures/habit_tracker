@@ -21,29 +21,13 @@ import {
   NotificationMessage,
 } from '../utils/notifications';
 import { NotificationBanner } from '../components/NotificationBanner';
+import { getVerseOfTheDay, VerseOfTheDay } from '../utils/verses';
+import { MemorizeVerseModal } from '../components/MemorizeVerseModal';
 
 interface HabitWithCompletion extends Habit {
   completedToday: boolean;
   completedThisWeek: boolean;
   isScheduledToday: boolean;
-}
-
-interface VerseOfTheDay {
-  date: string;
-  reference: string;
-  text: string;
-  bibleGatewayUrl: string;
-}
-
-const verses: VerseOfTheDay[] = require('../../assets/verses.json');
-
-function getVerseOfTheDay(): VerseOfTheDay {
-  const today = new Date();
-  const month = String(today.getMonth() + 1).padStart(2, '0');
-  const day = String(today.getDate()).padStart(2, '0');
-  const dateKey = `${month}-${day}`;
-  const verse = verses.find(v => v.date === dateKey);
-  return verse || verses[0];
 }
 
 function getWeekStart(date: Date): Date {
@@ -83,6 +67,7 @@ export function HabitTrackerScreen() {
   const [bannerVisible, setBannerVisible] = useState(false);
   const [isCelebration, setIsCelebration] = useState(false);
   const [isMini, setIsMini] = useState(false);
+  const [memorizeModalVisible, setMemorizeModalVisible] = useState(false);
 
   const shownNotifications = useRef<Set<string>>(new Set());
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -297,6 +282,14 @@ export function HabitTrackerScreen() {
       return !habit.completedThisWeek;
     }
     return habit.isScheduledToday;
+  };
+
+  const memorizeHabit = [...dailyHabits, ...weeklyHabits].find(h => h.name === 'Memorize a Verse');
+
+  const handleVersePracticeComplete = () => {
+    if (memorizeHabit && !memorizeHabit.completedToday && canToggleWeeklyHabit(memorizeHabit)) {
+      toggleHabit(memorizeHabit);
+    }
   };
 
   const toggleHabit = async (habit: HabitWithCompletion) => {
@@ -576,6 +569,17 @@ export function HabitTrackerScreen() {
                       Read Full Chapter on Bible Gateway 🔗
                     </Text>
                   </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.practiceMemorizingButton,
+                      { borderColor: currentTheme.accent }
+                    ]}
+                    onPress={() => setMemorizeModalVisible(true)}
+                  >
+                    <Text style={[styles.practiceMemorizingButtonText, { color: currentTheme.accent }]}>
+                      📝 Practice Memorizing
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               </>
             )}
@@ -599,6 +603,14 @@ export function HabitTrackerScreen() {
           }}
         />
       )}
+
+      <MemorizeVerseModal
+        visible={memorizeModalVisible}
+        onClose={() => setMemorizeModalVisible(false)}
+        verseOfTheDay={verseOfTheDay}
+        memorizeHabitCompletedToday={memorizeHabit ? memorizeHabit.completedToday : true}
+        onPracticeComplete={handleVersePracticeComplete}
+      />
     </View>
   );
 }
@@ -757,6 +769,18 @@ const styles = StyleSheet.create({
   },
   bibleGatewayButtonText: {
     color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  practiceMemorizingButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  practiceMemorizingButtonText: {
     fontSize: 14,
     fontWeight: 'bold',
   },

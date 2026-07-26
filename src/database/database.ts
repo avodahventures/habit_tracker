@@ -38,6 +38,16 @@ export interface HabitStats {
   totalCompleted: number;
 }
 
+export interface MemoryVerse {
+  id: number;
+  reference: string;
+  text: string;
+  status: string;
+  timesPracticed: number;
+  lastPracticedAt: string | null;
+  createdAt: string;
+}
+
 class Database {
   private db: SQLite.SQLiteDatabase | null = null;
 
@@ -76,6 +86,17 @@ class Database {
           answered INTEGER DEFAULT 0,
           answeredNote TEXT DEFAULT '',
           createdAt TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS memory_verses (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          reference TEXT NOT NULL,
+          text TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'learning',
+          timesPracticed INTEGER NOT NULL DEFAULT 0,
+          lastPracticedAt TEXT,
+          createdAt TEXT NOT NULL,
+          UNIQUE(reference)
         );
       `);
 
@@ -278,6 +299,44 @@ class Database {
   async deleteJournalEntry(id: number): Promise<void> {
     const database = this.getDatabase();
     await database.runAsync('DELETE FROM journal_entries WHERE id = ?', [id]);
+  }
+
+  async getMemoryVerses(): Promise<MemoryVerse[]> {
+    const database = this.getDatabase();
+    const result = await database.getAllAsync('SELECT * FROM memory_verses ORDER BY createdAt DESC');
+    return result as MemoryVerse[];
+  }
+
+  async addMemoryVerse(reference: string, text: string): Promise<void> {
+    const database = this.getDatabase();
+    const createdAt = new Date().toISOString();
+    try {
+      await database.runAsync(
+        'INSERT INTO memory_verses (reference, text, status, timesPracticed, lastPracticedAt, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
+        [reference, text, 'learning', 0, null, createdAt]
+      );
+    } catch (error) {
+      // Verse with this reference is already saved - ignore (UNIQUE constraint)
+    }
+  }
+
+  async deleteMemoryVerse(id: number): Promise<void> {
+    const database = this.getDatabase();
+    await database.runAsync('DELETE FROM memory_verses WHERE id = ?', [id]);
+  }
+
+  async recordVersePractice(id: number): Promise<void> {
+    const database = this.getDatabase();
+    const lastPracticedAt = new Date().toISOString();
+    await database.runAsync(
+      'UPDATE memory_verses SET timesPracticed = timesPracticed + 1, lastPracticedAt = ? WHERE id = ?',
+      [lastPracticedAt, id]
+    );
+  }
+
+  async setMemoryVerseStatus(id: number, status: string): Promise<void> {
+    const database = this.getDatabase();
+    await database.runAsync('UPDATE memory_verses SET status = ? WHERE id = ?', [status, id]);
   }
 }
 
