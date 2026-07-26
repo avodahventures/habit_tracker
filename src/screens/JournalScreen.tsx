@@ -13,24 +13,21 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
 import { usePremium } from '../context/PremiumContext';
-import { db } from '../database/database';
+import { db, JournalEntry } from '../database/database';
 import { exportJournalToPDF, exportJournalToExcel } from '../utils/export';
 
-interface JournalEntry {
-  id: number;
-  date: string;
-  content: string;
-  tags: string;
-  createdAt: string;
-}
+type JournalTab = 'gratitude' | 'prayer';
 
 export function JournalScreen() {
   const { currentTheme } = useTheme();
   const { isPremium } = usePremium();
+  const [activeTab, setActiveTab] = useState<JournalTab>('gratitude');
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [entryText, setEntryText] = useState('');
   const [entryTags, setEntryTags] = useState('');
+  const [entryAnswered, setEntryAnswered] = useState(false);
+  const [entryAnsweredNote, setEntryAnsweredNote] = useState('');
   const [editingEntry, setEditingEntry] = useState<JournalEntry | null>(null);
   const [searchText, setSearchText] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<string | null>(null);
@@ -46,6 +43,10 @@ export function JournalScreen() {
     const allEntries = await db.getJournalEntries();
     setEntries(allEntries);
   };
+
+  const isEditingPrayer = editingEntry
+    ? editingEntry.type === 'prayer'
+    : activeTab === 'prayer';
 
   const handleSave = async () => {
     if (!entryText.trim()) {
@@ -64,14 +65,22 @@ export function JournalScreen() {
       const date = new Date().toISOString().split('T')[0];
 
       if (editingEntry) {
-        await db.updateJournalEntry(editingEntry.id, entryText, entryTags);
+        await db.updateJournalEntry(
+          editingEntry.id,
+          entryText,
+          entryTags,
+          isEditingPrayer ? entryAnswered : false,
+          isEditingPrayer ? entryAnsweredNote : ''
+        );
       } else {
-        await db.addJournalEntry(date, entryText, entryTags);
+        await db.addJournalEntry(date, entryText, entryTags, activeTab, entryAnswered, entryAnsweredNote);
       }
 
       setModalVisible(false);
       setEntryText('');
       setEntryTags('');
+      setEntryAnswered(false);
+      setEntryAnsweredNote('');
       setEditingEntry(null);
       loadEntries();
     } catch (error) {
@@ -84,19 +93,23 @@ export function JournalScreen() {
     setModalVisible(false);
     setEntryText('');
     setEntryTags('');
+    setEntryAnswered(false);
+    setEntryAnsweredNote('');
     setEditingEntry(null);
   };
 
   const handleEdit = (entry: JournalEntry) => {
     setEditingEntry(entry);
     setEntryText(entry.content);
-    
+    setEntryAnswered(!!entry.answered);
+    setEntryAnsweredNote(entry.answeredNote || '');
+
     if (isPremium) {
       setEntryTags(entry.tags);
     } else {
       setEntryTags('');
     }
-    
+
     setModalVisible(true);
   };
 
@@ -112,6 +125,24 @@ export function JournalScreen() {
         },
       },
     ]);
+  };
+
+  const handleToggleAnswered = async (entry: JournalEntry) => {
+    try {
+      await db.updateJournalEntry(entry.id, entry.content, entry.tags, !entry.answered, entry.answeredNote);
+      loadEntries();
+    } catch (error) {
+      console.error('Error updating prayer status:', error);
+    }
+  };
+
+  const handleSaveAnsweredNote = async (entry: JournalEntry, note: string) => {
+    try {
+      await db.updateJournalEntry(entry.id, entry.content, entry.tags, true, note);
+      loadEntries();
+    } catch (error) {
+      console.error('Error saving answered note:', error);
+    }
   };
 
   const handleSearch = async () => {
@@ -156,7 +187,7 @@ export function JournalScreen() {
 
     try {
       setShowExportMenu(false);
-      await exportJournalToPDF(entries);
+      await exportJournalToPDF(activeTabEntries);
       Alert.alert('Success', 'Journal exported to PDF');
     } catch (error) {
       Alert.alert('Error', 'Failed to export journal');
@@ -172,16 +203,23 @@ export function JournalScreen() {
 
     try {
       setShowExportMenu(false);
-      await exportJournalToExcel(entries);
+      await exportJournalToExcel(activeTabEntries);
       Alert.alert('Success', 'Journal exported to Excel');
     } catch (error) {
       Alert.alert('Error', 'Failed to export journal');
     }
   };
 
+  const activeTabEntries = entries.filter(entry =>
+    activeTab === 'prayer' ? entry.type === 'prayer' : entry.type !== 'prayer'
+  );
+
+  const unansweredPrayers = activeTabEntries.filter(entry => !entry.answered);
+  const answeredPrayers = activeTabEntries.filter(entry => !!entry.answered);
+
   const getAllTags = (): string[] => {
     const tagsSet = new Set<string>();
-    entries.forEach((entry) => {
+    activeTabEntries.forEach((entry) => {
       entry.tags.split(',').forEach((tag) => {
         const trimmedTag = tag.trim();
         if (trimmedTag) tagsSet.add(trimmedTag);
@@ -190,11 +228,76 @@ export function JournalScreen() {
     return Array.from(tagsSet);
   };
 
+  const renderEntryCard = (item: JournalEntry, isPrayer: boolean) => (
+    <View style={[styles.entryCard, { backgroundColor: currentTheme.cardBackground }]}>
+      <View style={styles.entryHeader}>
+        <Text style={[styles.entryDate, { color: currentTheme.textSecondary }]}>
+          {new Date(item.date).toLocaleDateString()}
+        </Text>
+        <View style={styles.entryActions}>
+          <TouchableOpacity onPress={() => handleEdit(item)}>
+            <Text style={styles.actionButton}>✏️</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => handleDelete(item.id)}>
+            <Text style={styles.actionButton}>🗑️</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+      <Text style={[styles.entryContent, { color: currentTheme.textPrimary }]}>
+        {item.content}
+      </Text>
+      {item.tags && isPremium && (
+        <View style={styles.entryTags}>
+          {item.tags.split(',').map((tag, index) => (
+            <Text
+              key={index}
+              style={[
+                styles.entryTag,
+                { backgroundColor: currentTheme.accent, color: '#FFFFFF' },
+              ]}
+            >
+              {tag.trim()}
+            </Text>
+          ))}
+        </View>
+      )}
+      {isPrayer && (
+        <View style={styles.answeredSection}>
+          <TouchableOpacity
+            style={styles.answeredCheckboxRow}
+            onPress={() => handleToggleAnswered(item)}
+          >
+            <View
+              style={[
+                styles.answeredCheckbox,
+                { borderColor: currentTheme.accent },
+                !!item.answered && { backgroundColor: currentTheme.accent },
+              ]}
+            >
+              {!!item.answered && <Text style={styles.checkmark}>✓</Text>}
+            </View>
+            <Text style={[styles.answeredLabel, { color: currentTheme.textPrimary }]}>
+              Answered
+            </Text>
+          </TouchableOpacity>
+
+          {!!item.answered && (
+            <AnsweredNoteInput
+              entry={item}
+              currentTheme={currentTheme}
+              onSave={(note) => handleSaveAnsweredNote(item, note)}
+            />
+          )}
+        </View>
+      )}
+    </View>
+  );
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: currentTheme.colors[0] }]}>
       <View style={styles.header}>
         <Text style={[styles.title, { color: currentTheme.textPrimary }]}>
-          Prayer Journal
+          Journal
         </Text>
         <TouchableOpacity
           style={styles.addButton}
@@ -202,10 +305,51 @@ export function JournalScreen() {
             setEditingEntry(null);
             setEntryText('');
             setEntryTags('');
+            setEntryAnswered(false);
+            setEntryAnsweredNote('');
             setModalVisible(true);
           }}
         >
           <Text style={styles.addButtonText}>+ New</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.tabsContainer}>
+        <TouchableOpacity
+          style={[
+            styles.tabButton,
+            { backgroundColor: currentTheme.cardBackground },
+            activeTab === 'gratitude' && { backgroundColor: currentTheme.accent },
+          ]}
+          onPress={() => setActiveTab('gratitude')}
+        >
+          <Text
+            style={[
+              styles.tabButtonText,
+              { color: currentTheme.textPrimary },
+              activeTab === 'gratitude' && { color: '#FFFFFF', fontWeight: 'bold' },
+            ]}
+          >
+            Gratitude Journal
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.tabButton,
+            { backgroundColor: currentTheme.cardBackground },
+            activeTab === 'prayer' && { backgroundColor: currentTheme.accent },
+          ]}
+          onPress={() => setActiveTab('prayer')}
+        >
+          <Text
+            style={[
+              styles.tabButtonText,
+              { color: currentTheme.textPrimary },
+              activeTab === 'prayer' && { color: '#FFFFFF', fontWeight: 'bold' },
+            ]}
+          >
+            Prayer Journal
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -233,7 +377,12 @@ export function JournalScreen() {
       </View>
 
       {getAllTags().length > 0 && isPremium && (
-        <ScrollView horizontal style={styles.tagsContainer} showsHorizontalScrollIndicator={false}>
+        <ScrollView
+          horizontal
+          style={styles.tagsContainer}
+          contentContainerStyle={styles.tagsContentContainer}
+          showsHorizontalScrollIndicator={false}
+        >
           {getAllTags().map((tag) => (
             <TouchableOpacity
               key={tag}
@@ -281,53 +430,63 @@ export function JournalScreen() {
         </View>
       )}
 
-      <FlatList
-        data={entries}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={({ item }) => (
-          <View style={[styles.entryCard, { backgroundColor: currentTheme.cardBackground }]}>
-            <View style={styles.entryHeader}>
-              <Text style={[styles.entryDate, { color: currentTheme.textSecondary }]}>
-                {new Date(item.date).toLocaleDateString()}
+      {activeTab === 'gratitude' ? (
+        <FlatList
+          data={activeTabEntries}
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={({ item }) => renderEntryCard(item, false)}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={[styles.emptyText, { color: currentTheme.textSecondary }]}>
+                No journal entries yet
               </Text>
-              <View style={styles.entryActions}>
-                <TouchableOpacity onPress={() => handleEdit(item)}>
-                  <Text style={styles.actionButton}>✏️</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => handleDelete(item.id)}>
-                  <Text style={styles.actionButton}>🗑️</Text>
-                </TouchableOpacity>
-              </View>
             </View>
-            <Text style={[styles.entryContent, { color: currentTheme.textPrimary }]}>
-              {item.content}
-            </Text>
-            {item.tags && isPremium && (
-              <View style={styles.entryTags}>
-                {item.tags.split(',').map((tag, index) => (
-                  <Text
-                    key={index}
-                    style={[
-                      styles.entryTag,
-                      { backgroundColor: currentTheme.accent, color: '#FFFFFF' },
-                    ]}
-                  >
-                    {tag.trim()}
+          }
+          contentContainerStyle={styles.listContent}
+        />
+      ) : (
+        <ScrollView contentContainerStyle={styles.listContent}>
+          {unansweredPrayers.length === 0 && answeredPrayers.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={[styles.emptyText, { color: currentTheme.textSecondary }]}>
+                No prayers yet
+              </Text>
+            </View>
+          ) : (
+            <>
+              <View style={styles.section}>
+                <Text style={[styles.sectionTitle, { color: currentTheme.textPrimary }]}>
+                  Prayers
+                </Text>
+                {unansweredPrayers.length === 0 ? (
+                  <Text style={[styles.emptyText, { color: currentTheme.textSecondary }]}>
+                    No prayers awaiting an answer
                   </Text>
-                ))}
+                ) : (
+                  unansweredPrayers.map((item) => (
+                    <View key={item.id}>{renderEntryCard(item, true)}</View>
+                  ))
+                )}
               </View>
-            )}
-          </View>
-        )}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={[styles.emptyText, { color: currentTheme.textSecondary }]}>
-              No journal entries yet
-            </Text>
-          </View>
-        }
-        contentContainerStyle={styles.listContent}
-      />
+
+              <View style={styles.section}>
+                <Text style={[styles.sectionTitle, { color: currentTheme.textPrimary }]}>
+                  Answered Prayers
+                </Text>
+                {answeredPrayers.length === 0 ? (
+                  <Text style={[styles.emptyText, { color: currentTheme.textSecondary }]}>
+                    No answered prayers yet
+                  </Text>
+                ) : (
+                  answeredPrayers.map((item) => (
+                    <View key={item.id}>{renderEntryCard(item, true)}</View>
+                  ))
+                )}
+              </View>
+            </>
+          )}
+        </ScrollView>
+      )}
 
       <TouchableOpacity
         style={[styles.exportButton, { backgroundColor: currentTheme.accent }]}
@@ -341,7 +500,7 @@ export function JournalScreen() {
           <View style={[styles.modalContainer, { backgroundColor: currentTheme.colors[0] }]}>
             <View style={[styles.modalHeader, { backgroundColor: currentTheme.cardBackground }]}>
               <Text style={[styles.modalTitle, { color: currentTheme.textPrimary }]}>
-                {editingEntry ? 'Edit Entry' : 'New Entry'}
+                {editingEntry ? 'Edit Entry' : isEditingPrayer ? 'New Prayer' : 'New Entry'}
               </Text>
 
               <View style={styles.buttonRow}>
@@ -372,7 +531,9 @@ export function JournalScreen() {
                     color: currentTheme.textPrimary,
                   },
                 ]}
-                placeholder="Write your prayer journal entry..."
+                placeholder={
+                  isEditingPrayer ? 'Write your prayer...' : 'Write your gratitude journal entry...'
+                }
                 placeholderTextColor={currentTheme.textSecondary}
                 value={entryText}
                 onChangeText={setEntryText}
@@ -402,6 +563,46 @@ export function JournalScreen() {
                   </View>
                 )}
               </View>
+
+              {isEditingPrayer && (
+                <View style={styles.answeredSection}>
+                  <TouchableOpacity
+                    style={styles.answeredCheckboxRow}
+                    onPress={() => setEntryAnswered(!entryAnswered)}
+                  >
+                    <View
+                      style={[
+                        styles.answeredCheckbox,
+                        { borderColor: currentTheme.accent },
+                        entryAnswered && { backgroundColor: currentTheme.accent },
+                      ]}
+                    >
+                      {entryAnswered && <Text style={styles.checkmark}>✓</Text>}
+                    </View>
+                    <Text style={[styles.answeredLabel, { color: currentTheme.textPrimary }]}>
+                      Mark as Answered
+                    </Text>
+                  </TouchableOpacity>
+
+                  {entryAnswered && (
+                    <TextInput
+                      style={[
+                        styles.answeredNoteInput,
+                        {
+                          backgroundColor: currentTheme.cardBackground,
+                          color: currentTheme.textPrimary,
+                        },
+                      ]}
+                      placeholder="How was this prayer answered?"
+                      placeholderTextColor={currentTheme.textSecondary}
+                      value={entryAnsweredNote}
+                      onChangeText={setEntryAnsweredNote}
+                      multiline
+                      textAlignVertical="top"
+                    />
+                  )}
+                </View>
+              )}
             </ScrollView>
           </View>
         </View>
@@ -429,6 +630,39 @@ export function JournalScreen() {
   );
 }
 
+interface AnsweredNoteInputProps {
+  entry: JournalEntry;
+  currentTheme: ReturnType<typeof useTheme>['currentTheme'];
+  onSave: (note: string) => void;
+}
+
+function AnsweredNoteInput({ entry, currentTheme, onSave }: AnsweredNoteInputProps) {
+  const [note, setNote] = useState(entry.answeredNote || '');
+
+  useEffect(() => {
+    setNote(entry.answeredNote || '');
+  }, [entry.answeredNote]);
+
+  return (
+    <TextInput
+      style={[
+        styles.answeredNoteInput,
+        {
+          backgroundColor: currentTheme.colors[1],
+          color: currentTheme.textPrimary,
+        },
+      ]}
+      placeholder="How was this prayer answered?"
+      placeholderTextColor={currentTheme.textSecondary}
+      value={note}
+      onChangeText={setNote}
+      onBlur={() => onSave(note)}
+      multiline
+      textAlignVertical="top"
+    />
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -453,6 +687,26 @@ const styles = StyleSheet.create({
   addButtonText: {
     color: '#FFFFFF',
     fontWeight: 'bold',
+  },
+  tabsContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    gap: 8,
+    marginBottom: 12,
+  },
+  tabButton: {
+    flex: 1,
+    minHeight: 44,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   searchContainer: {
     flexDirection: 'row',
@@ -483,17 +737,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   tagsContainer: {
-    paddingHorizontal: 20,
+    height: 48,
     marginBottom: 12,
+    flexGrow: 0,
+  },
+  tagsContentContainer: {
+    paddingHorizontal: 20,
+    alignItems: 'center',
   },
   tagButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     borderRadius: 20,
-    marginRight: 8,
+    marginRight: 10,
+    justifyContent: 'center',
   },
   tagButtonText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
   },
   exportMenu: {
@@ -510,6 +770,14 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: 20,
     paddingBottom: 100,
+  },
+  section: {
+    marginBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 12,
   },
   entryCard: {
     padding: 12,
@@ -549,6 +817,41 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     fontSize: 12,
     fontWeight: '600',
+  },
+  answeredSection: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(128, 128, 128, 0.2)',
+  },
+  answeredCheckboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  answeredCheckbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  checkmark: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  answeredLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  answeredNoteInput: {
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 8,
+    fontSize: 13,
+    minHeight: 60,
   },
   emptyContainer: {
     alignItems: 'center',

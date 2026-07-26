@@ -14,6 +14,8 @@ type ViewType = '7days' | '30days' | '12months';
 interface WeekData {
   habitId: number;
   habitName: string;
+  frequency: string;
+  weekday?: string;
   days: boolean[];
 }
 
@@ -78,6 +80,8 @@ export function DashboardScreen() {
         data.push({
           habitId: habit.id,
           habitName: habit.name,
+          frequency: habit.frequency,
+          weekday: habit.weekday,
           days,
         });
       }
@@ -179,6 +183,13 @@ export function DashboardScreen() {
     return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   }
 
+  function getWeekHabitFrequencyText(habit: WeekData): string {
+    if (habit.frequency === 'weekly') {
+      return habit.weekday ? `Weekly • ${habit.weekday}` : 'Weekly • Any weekday';
+    }
+    return 'Daily';
+  }
+
   function formatDateRange(weekStart: Date): string {
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekStart.getDate() + 6);
@@ -255,6 +266,81 @@ export function DashboardScreen() {
     );
   };
 
+  const renderWeekGrid = (data: WeekData[], showFrequencyLabel: boolean) => (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+      <View>
+        {/* Header Row */}
+        <View style={styles.gridRow}>
+          <View style={[styles.habitNameCell, styles.headerCell, { backgroundColor: currentTheme.colors[1] }]}>
+            <Text style={[styles.headerText, { color: currentTheme.textPrimary }]}>Habit</Text>
+          </View>
+          {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => {
+            const date = new Date(selectedWeekStart);
+            date.setDate(selectedWeekStart.getDate() + index);
+            const isToday = date.toDateString() === new Date().toDateString();
+
+            return (
+              <View key={index} style={[styles.dayCell, styles.headerCell, { backgroundColor: currentTheme.colors[1] }]}>
+                <Text style={[styles.headerText, { color: isToday ? currentTheme.accent : currentTheme.textPrimary }]}>
+                  {day}
+                </Text>
+                <Text style={[styles.dateNumber, { color: isToday ? currentTheme.accent : currentTheme.textSecondary }]}>
+                  {date.getDate()}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+
+        {/* Data Rows */}
+        {data.map((habit, habitIndex) => (
+          <View
+            key={habit.habitId}
+            style={[
+              styles.gridRow,
+              showFrequencyLabel && styles.gridRowTall,
+              habitIndex % 2 === 0 && { backgroundColor: currentTheme.cardBackground },
+            ]}
+          >
+            <View style={styles.habitNameCell}>
+              <Text style={[styles.habitNameText, { color: currentTheme.textPrimary }]} numberOfLines={1}>
+                {habit.habitName}
+              </Text>
+              {showFrequencyLabel && (
+                <Text style={[styles.habitFrequencyLabel, { color: currentTheme.accent }]} numberOfLines={1}>
+                  {getWeekHabitFrequencyText(habit)}
+                </Text>
+              )}
+            </View>
+            {habit.days.map((completed, dayIndex) => (
+              <View key={dayIndex} style={styles.dayCell}>
+                <View
+                  style={[
+                    styles.checkbox,
+                    { borderColor: currentTheme.accent },
+                    completed && { backgroundColor: currentTheme.accent },
+                  ]}
+                >
+                  {completed && <Text style={styles.checkmark}>✓</Text>}
+                </View>
+              </View>
+            ))}
+          </View>
+        ))}
+      </View>
+    </ScrollView>
+  );
+
+  const dailyWeekData = weekData.filter(h => !h.frequency || h.frequency === 'daily');
+  const weekdayOrder = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Any weekday'];
+  const weeklyWeekData = weekData
+    .filter(h => h.frequency === 'weekly')
+    .sort((a, b) => {
+      const aDay = a.weekday || 'Any weekday';
+      const bDay = b.weekday || 'Any weekday';
+      return weekdayOrder.indexOf(aDay) - weekdayOrder.indexOf(bDay);
+    });
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: currentTheme.colors[0] }]}>
       <View style={styles.header}>
@@ -329,88 +415,48 @@ export function DashboardScreen() {
       <ScrollView style={styles.content}>
         {/* 7 DAYS VIEW - FREE */}
         {selectedView === '7days' && (
-          <View style={[styles.card, { backgroundColor: currentTheme.cardBackground }]}>
-            <View style={styles.cardHeader}>
-              <Text style={[styles.cardTitle, { color: currentTheme.textPrimary }]}>
-                Weekly Progress
-              </Text>
-              <View style={styles.weekNavigation}>
-                <TouchableOpacity onPress={() => navigateWeek('prev')} style={styles.navButton}>
-                  <Text style={[styles.navButtonText, { color: currentTheme.accent }]}>◀</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => navigateWeek('today')} style={styles.todayButton}>
-                  <Text style={[styles.todayButtonText, { color: currentTheme.textPrimary }]}>
-                    {formatDateRange(selectedWeekStart)}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => navigateWeek('next')} style={styles.navButton}>
-                  <Text style={[styles.navButtonText, { color: currentTheme.accent }]}>▶</Text>
-                </TouchableOpacity>
-              </View>
+          <View>
+            <View style={styles.weekNavigation}>
+              <TouchableOpacity onPress={() => navigateWeek('prev')} style={styles.navButton}>
+                <Text style={[styles.navButtonText, { color: currentTheme.accent }]}>◀</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => navigateWeek('today')} style={styles.todayButton}>
+                <Text style={[styles.todayButtonText, { color: currentTheme.textPrimary }]}>
+                  {formatDateRange(selectedWeekStart)}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => navigateWeek('next')} style={styles.navButton}>
+                <Text style={[styles.navButtonText, { color: currentTheme.accent }]}>▶</Text>
+              </TouchableOpacity>
             </View>
 
-            {habits.length === 0 ? (
-              <Text style={[styles.emptyText, { color: currentTheme.textSecondary }]}>
-                No habits yet. Add some in Settings!
+            {/* Daily Tasks */}
+            <View style={[styles.card, { backgroundColor: currentTheme.cardBackground }]}>
+              <Text style={[styles.cardTitle, { color: currentTheme.textPrimary }]}>
+                7 Days Progress - Daily Tasks
               </Text>
-            ) : (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View>
-                  {/* Header Row */}
-                  <View style={styles.gridRow}>
-                    <View style={[styles.habitNameCell, styles.headerCell, { backgroundColor: currentTheme.colors[1] }]}>
-                      <Text style={[styles.headerText, { color: currentTheme.textPrimary }]}>Habit</Text>
-                    </View>
-                    {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => {
-                      const date = new Date(selectedWeekStart);
-                      date.setDate(selectedWeekStart.getDate() + index);
-                      const isToday = date.toDateString() === new Date().toDateString();
-                      
-                      return (
-                        <View key={index} style={[styles.dayCell, styles.headerCell, { backgroundColor: currentTheme.colors[1] }]}>
-                          <Text style={[styles.headerText, { color: isToday ? currentTheme.accent : currentTheme.textPrimary }]}>
-                            {day}
-                          </Text>
-                          <Text style={[styles.dateNumber, { color: isToday ? currentTheme.accent : currentTheme.textSecondary }]}>
-                            {date.getDate()}
-                          </Text>
-                        </View>
-                      );
-                    })}
-                  </View>
+              {dailyWeekData.length === 0 ? (
+                <Text style={[styles.emptyText, { color: currentTheme.textSecondary }]}>
+                  No daily habits yet. Add some in Settings!
+                </Text>
+              ) : (
+                renderWeekGrid(dailyWeekData, false)
+              )}
+            </View>
 
-                  {/* Data Rows */}
-                  {weekData.map((habit, habitIndex) => (
-                    <View
-                      key={habit.habitId}
-                      style={[
-                        styles.gridRow,
-                        habitIndex % 2 === 0 && { backgroundColor: currentTheme.cardBackground },
-                      ]}
-                    >
-                      <View style={styles.habitNameCell}>
-                        <Text style={[styles.habitNameText, { color: currentTheme.textPrimary }]} numberOfLines={1}>
-                          {habit.habitName}
-                        </Text>
-                      </View>
-                      {habit.days.map((completed, dayIndex) => (
-                        <View key={dayIndex} style={styles.dayCell}>
-                          <View
-                            style={[
-                              styles.checkbox,
-                              { borderColor: currentTheme.accent },
-                              completed && { backgroundColor: currentTheme.accent },
-                            ]}
-                          >
-                            {completed && <Text style={styles.checkmark}>✓</Text>}
-                          </View>
-                        </View>
-                      ))}
-                    </View>
-                  ))}
-                </View>
-              </ScrollView>
-            )}
+            {/* Weekly Tasks */}
+            <View style={[styles.card, { backgroundColor: currentTheme.cardBackground }]}>
+              <Text style={[styles.cardTitle, { color: currentTheme.textPrimary }]}>
+                7 Days Progress - Weekly Tasks
+              </Text>
+              {weeklyWeekData.length === 0 ? (
+                <Text style={[styles.emptyText, { color: currentTheme.textSecondary }]}>
+                  No weekly habits yet. Add some in Settings!
+                </Text>
+              ) : (
+                renderWeekGrid(weeklyWeekData, true)
+              )}
+            </View>
           </View>
         )}
 
@@ -617,9 +663,6 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 20,
   },
-  cardHeader: {
-    marginBottom: 16,
-  },
   cardTitle: {
     fontSize: 20,
     fontWeight: 'bold',
@@ -634,6 +677,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginBottom: 20,
   },
   monthNavigation: {
     flexDirection: 'row',
@@ -675,6 +719,9 @@ const styles = StyleSheet.create({
     minHeight: 50,
     alignItems: 'center',
   },
+  gridRowTall: {
+    minHeight: 62,
+  },
   habitNameCell: {
     width: 120,
     paddingHorizontal: 8,
@@ -702,6 +749,11 @@ const styles = StyleSheet.create({
   habitNameText: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  habitFrequencyLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 2,
   },
   checkbox: {
     width: 24,

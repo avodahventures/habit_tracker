@@ -20,6 +20,7 @@ export function SettingsScreen() {
   const [weekdayModalVisible, setWeekdayModalVisible] = useState(false);
   const [habitName, setHabitName] = useState('');
   const [pendingHabit, setPendingHabit] = useState<{ name: string; icon: string } | null>(null);
+  const [editingHabitId, setEditingHabitId] = useState<number | null>(null);
   const [selectedFrequency, setSelectedFrequency] = useState<'daily' | 'weekly'>('daily');
   const [selectedWeekday, setSelectedWeekday] = useState<string>('Any weekday');
 
@@ -62,12 +63,20 @@ export function SettingsScreen() {
     }
   };
 
+  const handleEditHabit = (habit: Habit) => {
+    setEditingHabitId(habit.id);
+    setPendingHabit({ name: habit.name, icon: habit.icon });
+    setSelectedFrequency(habit.frequency === 'weekly' ? 'weekly' : 'daily');
+    setSelectedWeekday(habit.weekday || 'Any weekday');
+    setFrequencyModalVisible(true);
+  };
+
   const handleFrequencySelected = () => {
     if (selectedFrequency === 'weekly') {
       setFrequencyModalVisible(false);
       setWeekdayModalVisible(true);
     } else {
-      // Daily - add immediately
+      // Daily - save immediately
       confirmAddHabit();
     }
   };
@@ -77,25 +86,41 @@ export function SettingsScreen() {
     confirmAddHabit();
   };
 
+  const closeFrequencyModals = () => {
+    setFrequencyModalVisible(false);
+    setWeekdayModalVisible(false);
+    setPendingHabit(null);
+    setEditingHabitId(null);
+  };
+
   const confirmAddHabit = async () => {
     if (!pendingHabit) return;
 
     try {
-      await db.addHabit({
-        name: pendingHabit.name,
-        icon: pendingHabit.icon,
-        color: currentTheme.accent,
-        frequency: selectedFrequency,
-        weekday: selectedFrequency === 'weekly' ? selectedWeekday : undefined,
-      });
+      if (editingHabitId) {
+        await db.updateHabitSchedule(
+          editingHabitId,
+          selectedFrequency,
+          selectedFrequency === 'weekly' ? selectedWeekday : undefined
+        );
+      } else {
+        await db.addHabit({
+          name: pendingHabit.name,
+          icon: pendingHabit.icon,
+          color: currentTheme.accent,
+          frequency: selectedFrequency,
+          weekday: selectedFrequency === 'weekly' ? selectedWeekday : undefined,
+        });
+      }
 
       await loadHabits();
       setPendingHabit(null);
+      setEditingHabitId(null);
       setFrequencyModalVisible(false);
       setWeekdayModalVisible(false);
     } catch (error) {
-      console.error('Error adding habit:', error);
-      Alert.alert('Error', 'Failed to add habit');
+      console.error('Error saving habit:', error);
+      Alert.alert('Error', 'Failed to save habit');
     }
   };
 
@@ -400,6 +425,14 @@ export function SettingsScreen() {
                           )}
                         </View>
                       </View>
+                      {existingHabit && (
+                        <TouchableOpacity
+                          style={styles.editButton}
+                          onPress={() => handleEditHabit(existingHabit)}
+                        >
+                          <Text style={styles.editButtonText}>✏️</Text>
+                        </TouchableOpacity>
+                      )}
                     </TouchableOpacity>
                   );
                 })}
@@ -433,6 +466,12 @@ export function SettingsScreen() {
                           {getHabitFrequencyText(habit)} • Custom
                         </Text>
                       </View>
+                      <TouchableOpacity
+                        style={styles.editButton}
+                        onPress={() => handleEditHabit(habit)}
+                      >
+                        <Text style={styles.editButtonText}>✏️</Text>
+                      </TouchableOpacity>
                       <TouchableOpacity onPress={() => handleDeleteHabit(habit.id, habit.name)}>
                         <Text style={styles.deleteButton}>Delete</Text>
                       </TouchableOpacity>
@@ -495,7 +534,7 @@ export function SettingsScreen() {
               How often?
             </Text>
             <Text style={[styles.modalSubtitle, { color: currentTheme.textSecondary }]}>
-              Choose the frequency for this habit
+              {editingHabitId ? 'Update the frequency for this habit' : 'Choose the frequency for this habit'}
             </Text>
 
             <TouchableOpacity
@@ -539,17 +578,14 @@ export function SettingsScreen() {
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={[styles.cancelButton, { backgroundColor: currentTheme.cardBackground }]}
-                onPress={() => {
-                  setFrequencyModalVisible(false);
-                  setPendingHabit(null);
-                }}
+                onPress={closeFrequencyModals}
               >
                 <Text style={[styles.cancelButtonText, { color: currentTheme.textPrimary }]}>
                   Cancel
                 </Text>
               </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.saveButton, { backgroundColor: currentTheme.accent }]} 
+              <TouchableOpacity
+                style={[styles.saveButton, { backgroundColor: currentTheme.accent }]}
                 onPress={handleFrequencySelected}
               >
                 <Text style={styles.saveButtonText}>
@@ -757,10 +793,21 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 14,
     marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   defaultHabitLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
+  },
+  editButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  editButtonText: {
+    fontSize: 18,
   },
   defaultCheckbox: {
     width: 24,

@@ -27,6 +27,9 @@ export interface JournalEntry {
   date: string;
   content: string;
   tags: string;
+  type: string;
+  answered: number;
+  answeredNote: string;
   createdAt: string;
 }
 
@@ -69,17 +72,26 @@ class Database {
           date TEXT NOT NULL,
           content TEXT NOT NULL,
           tags TEXT DEFAULT '',
+          type TEXT DEFAULT 'gratitude',
+          answered INTEGER DEFAULT 0,
+          answeredNote TEXT DEFAULT '',
           createdAt TEXT NOT NULL
         );
       `);
 
-      // Add weekday column if it doesn't exist (migration)
-      try {
-        await this.db.execAsync(`
-          ALTER TABLE journal_entries ADD COLUMN tags TEXT DEFAULT '';
-        `);
-      } catch (error) {
-        // Column already exists, ignore error
+      // Add columns for older installs if they don't already exist (migration)
+      const journalMigrations = [
+        `ALTER TABLE journal_entries ADD COLUMN tags TEXT DEFAULT '';`,
+        `ALTER TABLE journal_entries ADD COLUMN type TEXT DEFAULT 'gratitude';`,
+        `ALTER TABLE journal_entries ADD COLUMN answered INTEGER DEFAULT 0;`,
+        `ALTER TABLE journal_entries ADD COLUMN answeredNote TEXT DEFAULT '';`,
+      ];
+      for (const migration of journalMigrations) {
+        try {
+          await this.db.execAsync(migration);
+        } catch (error) {
+          // Column already exists, ignore error
+        }
       }
 
       console.log('Database initialized successfully');
@@ -128,6 +140,14 @@ class Database {
   async deleteHabit(id: number): Promise<void> {
     const database = this.getDatabase();
     await database.runAsync('DELETE FROM habits WHERE id = ?', [id]);
+  }
+
+  async updateHabitSchedule(id: number, frequency: string, weekday?: string): Promise<void> {
+    const database = this.getDatabase();
+    await database.runAsync(
+      'UPDATE habits SET frequency = ?, weekday = ? WHERE id = ?',
+      [frequency, weekday || null, id]
+    );
   }
 
   async getTodayLogs(): Promise<HabitLog[]> {
@@ -225,20 +245,33 @@ class Database {
     return result as JournalEntry[];
   }
 
-  async addJournalEntry(date: string, content: string, tags: string = ''): Promise<void> {
+  async addJournalEntry(
+    date: string,
+    content: string,
+    tags: string = '',
+    type: string = 'gratitude',
+    answered: boolean = false,
+    answeredNote: string = ''
+  ): Promise<void> {
     const database = this.getDatabase();
     const createdAt = new Date().toISOString();
     await database.runAsync(
-      'INSERT INTO journal_entries (date, content, tags, createdAt) VALUES (?, ?, ?, ?)',
-      [date, content, tags, createdAt]
+      'INSERT INTO journal_entries (date, content, tags, type, answered, answeredNote, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [date, content, tags, type, answered ? 1 : 0, answeredNote, createdAt]
     );
   }
 
-  async updateJournalEntry(id: number, content: string, tags: string = ''): Promise<void> {
+  async updateJournalEntry(
+    id: number,
+    content: string,
+    tags: string = '',
+    answered: boolean = false,
+    answeredNote: string = ''
+  ): Promise<void> {
     const database = this.getDatabase();
     await database.runAsync(
-      'UPDATE journal_entries SET content = ?, tags = ? WHERE id = ?',
-      [content, tags, id]
+      'UPDATE journal_entries SET content = ?, tags = ?, answered = ?, answeredNote = ? WHERE id = ?',
+      [content, tags, answered ? 1 : 0, answeredNote, id]
     );
   }
 
