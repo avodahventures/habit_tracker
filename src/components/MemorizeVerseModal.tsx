@@ -8,11 +8,13 @@ import {
   ScrollView,
   TextInput,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
 import { db, MemoryVerse } from '../database/database';
 import { verses, VerseOfTheDay } from '../utils/verses';
+import { fetchVerseFromBible, normalizeReference } from '../utils/bibleApi';
 
 const HIDE_LEVELS = [0, 25, 50, 75, 100];
 
@@ -57,6 +59,7 @@ export function MemorizeVerseModal({
   onPracticeComplete,
 }: MemorizeVerseModalProps) {
   const { currentTheme } = useTheme();
+  const insets = useSafeAreaInsets();
   const [view, setView] = useState<ModalView>('browse');
   const [previousView, setPreviousView] = useState<ModalView>('browse');
   const [savedVerses, setSavedVerses] = useState<MemoryVerse[]>([]);
@@ -64,11 +67,22 @@ export function MemorizeVerseModal({
   const [activeVerse, setActiveVerse] = useState<{ id?: number; reference: string; text: string } | null>(null);
   const [hidePercent, setHidePercent] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
+  const [lookupBook, setLookupBook] = useState('');
+  const [lookupChapter, setLookupChapter] = useState('');
+  const [lookupVerse, setLookupVerse] = useState('');
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookupError, setLookupError] = useState<string | null>(null);
+  const [lookupResult, setLookupResult] = useState<{ reference: string; text: string; fromInternet: boolean } | null>(null);
 
   useEffect(() => {
     if (visible) {
       setView('browse');
       setSearchText('');
+      setLookupBook('');
+      setLookupChapter('');
+      setLookupVerse('');
+      setLookupError(null);
+      setLookupResult(null);
       loadSavedVerses();
     }
   }, [visible]);
@@ -83,6 +97,35 @@ export function MemorizeVerseModal({
   const handleAddVerse = async (reference: string, text: string) => {
     await db.addMemoryVerse(reference, text);
     await loadSavedVerses();
+  };
+
+  const handleLookupVerse = async () => {
+    if (!lookupBook.trim() || !lookupChapter.trim() || !lookupVerse.trim()) {
+      Alert.alert('Missing Info', 'Please enter the book, chapter, and verse.');
+      return;
+    }
+
+    setLookupError(null);
+    setLookupResult(null);
+    setLookupLoading(true);
+
+    try {
+      const queryReference = `${lookupBook} ${lookupChapter}:${lookupVerse}`;
+      const normalizedQuery = normalizeReference(queryReference);
+      const localMatch = verses.find(v => normalizeReference(v.reference) === normalizedQuery);
+
+      if (localMatch) {
+        setLookupResult({ reference: localMatch.reference, text: localMatch.text, fromInternet: false });
+      } else {
+        const fetched = await fetchVerseFromBible(lookupBook, lookupChapter, lookupVerse);
+        setLookupResult({ reference: fetched.reference, text: fetched.text, fromInternet: true });
+      }
+    } catch (error) {
+      console.error('Error looking up verse:', error);
+      setLookupError('Could not find that verse. Check the book, chapter, and verse and try again.');
+    } finally {
+      setLookupLoading(false);
+    }
   };
 
   const handleDeleteVerse = (verse: MemoryVerse) => {
@@ -145,7 +188,16 @@ export function MemorizeVerseModal({
 
   return (
     <Modal visible={visible} animationType="slide" transparent>
-      <SafeAreaView style={[styles.modal, { backgroundColor: currentTheme.colors[0] }]}>
+      <View
+        style={[
+          styles.modal,
+          {
+            backgroundColor: currentTheme.colors[0],
+            paddingTop: Math.max(insets.top, 20),
+            paddingBottom: insets.bottom,
+          },
+        ]}
+      >
         <View style={[styles.header, { backgroundColor: currentTheme.cardBackground }]}>
           <Text style={[styles.headerTitle, { color: currentTheme.textPrimary }]}>
             Memorize a Verse
@@ -231,6 +283,96 @@ export function MemorizeVerseModal({
                 </TouchableOpacity>
               </View>
             </View>
+
+            <Text style={[styles.sectionLabel, { color: currentTheme.textPrimary }]}>
+              Look Up a Specific Verse
+            </Text>
+            <View style={styles.lookupRow}>
+              <TextInput
+                style={[
+                  styles.lookupInputBook,
+                  { backgroundColor: currentTheme.cardBackground, color: currentTheme.textPrimary },
+                ]}
+                placeholder="Book (e.g. John)"
+                placeholderTextColor={currentTheme.textSecondary}
+                value={lookupBook}
+                onChangeText={setLookupBook}
+              />
+              <TextInput
+                style={[
+                  styles.lookupInputSmall,
+                  { backgroundColor: currentTheme.cardBackground, color: currentTheme.textPrimary },
+                ]}
+                placeholder="Ch."
+                placeholderTextColor={currentTheme.textSecondary}
+                value={lookupChapter}
+                onChangeText={setLookupChapter}
+                keyboardType="number-pad"
+              />
+              <TextInput
+                style={[
+                  styles.lookupInputSmall,
+                  { backgroundColor: currentTheme.cardBackground, color: currentTheme.textPrimary },
+                ]}
+                placeholder="Vs."
+                placeholderTextColor={currentTheme.textSecondary}
+                value={lookupVerse}
+                onChangeText={setLookupVerse}
+                keyboardType="number-pad"
+              />
+            </View>
+            <TouchableOpacity
+              style={[styles.lookupButton, { backgroundColor: currentTheme.accent }]}
+              onPress={handleLookupVerse}
+              disabled={lookupLoading}
+            >
+              {lookupLoading ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Text style={styles.smallButtonFilledText}>🔍 Look Up Verse</Text>
+              )}
+            </TouchableOpacity>
+
+            {lookupError && (
+              <Text style={[styles.lookupErrorText, { color: '#EF4444' }]}>{lookupError}</Text>
+            )}
+
+            {lookupResult && (
+              <View style={[styles.verseCard, { backgroundColor: currentTheme.cardBackground, marginBottom: 20 }]}>
+                <View style={styles.savedCardHeader}>
+                  <Text style={[styles.verseReference, { color: currentTheme.accent }]}>
+                    {lookupResult.reference}
+                  </Text>
+                  {lookupResult.fromInternet && (
+                    <View style={[styles.statusBadge, { backgroundColor: currentTheme.colors[1] }]}>
+                      <Text style={[styles.statusBadgeText, { color: currentTheme.textSecondary }]}>
+                        🌐 From Internet
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={[styles.verseText, { color: currentTheme.textPrimary }]}>
+                  "{lookupResult.text}"
+                </Text>
+                <View style={styles.verseActions}>
+                  <TouchableOpacity
+                    style={[styles.smallButton, { borderColor: currentTheme.accent }]}
+                    onPress={() => handleAddVerse(lookupResult.reference, lookupResult.text)}
+                    disabled={isSaved(lookupResult.reference)}
+                  >
+                    <Text style={[styles.smallButtonText, { color: currentTheme.accent }]}>
+                      {isSaved(lookupResult.reference) ? '✓ Saved' : '+ Add to My Verses'}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.smallButtonFilled, { backgroundColor: currentTheme.accent }]}
+                    onPress={() => startPractice(lookupResult, 'browse')}
+                  >
+                    <Text style={styles.smallButtonFilledText}>📝 Practice</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
 
             <Text style={[styles.sectionLabel, { color: currentTheme.textPrimary }]}>
               Find Another Verse
@@ -404,7 +546,7 @@ export function MemorizeVerseModal({
             </TouchableOpacity>
           </ScrollView>
         )}
-      </SafeAreaView>
+      </View>
     </Modal>
   );
 }
@@ -506,6 +648,34 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     fontSize: 14,
+    marginBottom: 12,
+  },
+  lookupRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 10,
+  },
+  lookupInputBook: {
+    flex: 2,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
+  },
+  lookupInputSmall: {
+    flex: 1,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  lookupButton: {
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  lookupErrorText: {
+    fontSize: 13,
     marginBottom: 12,
   },
   browseRow: {

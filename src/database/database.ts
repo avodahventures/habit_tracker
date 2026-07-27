@@ -35,6 +35,7 @@ export interface JournalEntry {
 
 export interface HabitStats {
   currentStreak: number;
+  bestStreak: number;
   totalCompleted: number;
 }
 
@@ -46,6 +47,105 @@ export interface MemoryVerse {
   timesPracticed: number;
   lastPracticedAt: string | null;
   createdAt: string;
+}
+
+const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+function computeDailyStreak(logs: HabitLog[]): { currentStreak: number; bestStreak: number } {
+  const today = new Date();
+  const todayStr = today.toISOString().split('T')[0];
+
+  let currentStreak = 0;
+  for (let i = 0; i < 730; i++) {
+    const checkDate = new Date(today);
+    checkDate.setDate(today.getDate() - i);
+    const dateStr = checkDate.toISOString().split('T')[0];
+    const log = logs.find(l => l.date === dateStr);
+
+    if (log && log.completed) {
+      currentStreak++;
+    } else if (dateStr !== todayStr) {
+      break;
+    }
+  }
+
+  const completedDates = logs
+    .filter(l => l.completed)
+    .map(l => l.date)
+    .sort();
+
+  let bestStreak = 0;
+  let running = 0;
+  let prevDate: Date | null = null;
+  for (const dateStr of completedDates) {
+    const date = new Date(dateStr + 'T00:00:00');
+    if (prevDate && Math.round((date.getTime() - prevDate.getTime()) / 86400000) === 1) {
+      running++;
+    } else {
+      running = 1;
+    }
+    bestStreak = Math.max(bestStreak, running);
+    prevDate = date;
+  }
+  bestStreak = Math.max(bestStreak, currentStreak);
+
+  return { currentStreak, bestStreak };
+}
+
+function getWeekStart(date: Date): Date {
+  const d = new Date(date);
+  d.setDate(d.getDate() - d.getDay());
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function isWeekSatisfied(weekStart: Date, completedDates: Set<string>, weekday?: string): boolean {
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(weekStart);
+    d.setDate(weekStart.getDate() + i);
+    const dateStr = d.toISOString().split('T')[0];
+    if (!completedDates.has(dateStr)) continue;
+    if (!weekday || weekday === 'Any weekday') return true;
+    if (WEEKDAY_NAMES[d.getDay()] === weekday) return true;
+  }
+  return false;
+}
+
+function computeWeeklyStreak(logs: HabitLog[], weekday?: string): { currentStreak: number; bestStreak: number } {
+  const completedDates = new Set(logs.filter(l => l.completed).map(l => l.date));
+  const currentWeekStart = getWeekStart(new Date());
+
+  let currentStreak = 0;
+  for (let i = 0; i < 260; i++) {
+    const weekStart = new Date(currentWeekStart);
+    weekStart.setDate(currentWeekStart.getDate() - i * 7);
+    const satisfied = isWeekSatisfied(weekStart, completedDates, weekday);
+
+    if (satisfied) {
+      currentStreak++;
+    } else if (i !== 0) {
+      break;
+    }
+    // i === 0 (current week) and not yet satisfied: grace period, don't break, don't count
+  }
+
+  let bestStreak = currentStreak;
+  if (logs.length > 0) {
+    const earliestDate = logs.reduce((min, l) => (l.date < min ? l.date : min), logs[0].date);
+    const cursor = getWeekStart(new Date(earliestDate + 'T00:00:00'));
+    let running = 0;
+    while (cursor <= currentWeekStart) {
+      if (isWeekSatisfied(cursor, completedDates, weekday)) {
+        running++;
+        bestStreak = Math.max(bestStreak, running);
+      } else {
+        running = 0;
+      }
+      cursor.setDate(cursor.getDate() + 7);
+    }
+  }
+
+  return { currentStreak, bestStreak };
 }
 
 class Database {
@@ -211,35 +311,23 @@ class Database {
     return result as HabitLog[];
   }
 
-  async getHabitStats(habitId: number): Promise<HabitStats> {
+  async getHabitStats(habitId: number, frequency: string, weekday?: string): Promise<HabitStats> {
     const database = this.getDatabase();
-    
+
     const logs = await database.getAllAsync(
       'SELECT * FROM habit_logs WHERE habitId = ? ORDER BY date DESC',
       [habitId]
     ) as HabitLog[];
 
     const totalCompleted = logs.filter(log => log.completed).length;
-    
-    let currentStreak = 0;
-    const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
-    
-    for (let i = 0; i < 365; i++) {
-      const checkDate = new Date(today);
-      checkDate.setDate(today.getDate() - i);
-      const dateStr = checkDate.toISOString().split('T')[0];
-      
-      const log = logs.find(l => l.date === dateStr);
-      
-      if (log && log.completed) {
-        currentStreak++;
-      } else if (dateStr !== todayStr) {
-        break;
-      }
+
+    if (frequency === 'weekly') {
+      const { currentStreak, bestStreak } = computeWeeklyStreak(logs, weekday);
+      return { currentStreak, bestStreak, totalCompleted };
     }
 
-    return { currentStreak, totalCompleted };
+    const { currentStreak, bestStreak } = computeDailyStreak(logs);
+    return { currentStreak, bestStreak, totalCompleted };
   }
 
   async getJournalEntries(): Promise<JournalEntry[]> {

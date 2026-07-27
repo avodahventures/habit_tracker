@@ -23,11 +23,14 @@ import {
 import { NotificationBanner } from '../components/NotificationBanner';
 import { getVerseOfTheDay, VerseOfTheDay } from '../utils/verses';
 import { MemorizeVerseModal } from '../components/MemorizeVerseModal';
+import { DailyQuizModal } from '../components/DailyQuizModal';
 
 interface HabitWithCompletion extends Habit {
   completedToday: boolean;
   completedThisWeek: boolean;
   isScheduledToday: boolean;
+  currentStreak: number;
+  bestStreak: number;
 }
 
 function getWeekStart(date: Date): Date {
@@ -68,6 +71,7 @@ export function HabitTrackerScreen() {
   const [isCelebration, setIsCelebration] = useState(false);
   const [isMini, setIsMini] = useState(false);
   const [memorizeModalVisible, setMemorizeModalVisible] = useState(false);
+  const [quizModalVisible, setQuizModalVisible] = useState(false);
 
   const shownNotifications = useRef<Set<string>>(new Set());
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -161,10 +165,14 @@ export function HabitTrackerScreen() {
       });
 
       const weekLogsMap: Record<number, boolean> = {};
+      const statsMap: Record<number, { currentStreak: number; bestStreak: number }> = {};
       for (const habit of allHabits) {
         const weekLogs = await db.getHabitLogs(habit.id, weekStartStr, weekEndStr);
         const completedThisWeek = weekLogs.some(log => log.completed === 1);
         weekLogsMap[habit.id] = completedThisWeek;
+
+        const stats = await db.getHabitStats(habit.id, habit.frequency, habit.weekday);
+        statsMap[habit.id] = stats;
       }
 
       const habitsWithCompletion = allHabits.map(habit => ({
@@ -172,6 +180,8 @@ export function HabitTrackerScreen() {
         completedToday: logsMap[habit.id] === 1,
         completedThisWeek: weekLogsMap[habit.id] || false,
         isScheduledToday: isHabitScheduledToday(habit),
+        currentStreak: statsMap[habit.id]?.currentStreak || 0,
+        bestStreak: statsMap[habit.id]?.bestStreak || 0,
       }));
 
       const daily = habitsWithCompletion.filter(
@@ -215,10 +225,14 @@ export function HabitTrackerScreen() {
       });
 
       const weekLogsMap: Record<number, boolean> = {};
+      const statsMap: Record<number, { currentStreak: number; bestStreak: number }> = {};
       for (const habit of allHabits) {
         const weekLogs = await db.getHabitLogs(habit.id, weekStartStr, weekEndStr);
         const completedThisWeek = weekLogs.some(log => log.completed === 1);
         weekLogsMap[habit.id] = completedThisWeek;
+
+        const stats = await db.getHabitStats(habit.id, habit.frequency, habit.weekday);
+        statsMap[habit.id] = stats;
       }
 
       const habitsWithCompletion = allHabits.map(habit => ({
@@ -226,6 +240,8 @@ export function HabitTrackerScreen() {
         completedToday: logsMap[habit.id] === 1,
         completedThisWeek: weekLogsMap[habit.id] || false,
         isScheduledToday: isHabitScheduledToday(habit),
+        currentStreak: statsMap[habit.id]?.currentStreak || 0,
+        bestStreak: statsMap[habit.id]?.bestStreak || 0,
       }));
 
       const daily = habitsWithCompletion.filter(
@@ -384,9 +400,17 @@ export function HabitTrackerScreen() {
     return null;
   };
 
+  const getStreakBadgeText = (habit: HabitWithCompletion): string | null => {
+    if (habit.currentStreak <= 0) return null;
+    const unit = habit.frequency === 'weekly' ? 'week' : 'day';
+    return `🔥 ${habit.currentStreak} ${unit}${habit.currentStreak === 1 ? '' : 's'}`;
+  };
+
   const renderHabitItem = (item: HabitWithCompletion) => {
     const canToggle = canToggleWeeklyHabit(item);
     const statusBadge = getHabitStatusBadge(item);
+    const streakBadge = getStreakBadgeText(item);
+    const showBestStreak = item.bestStreak > item.currentStreak && item.bestStreak > 0;
 
     return (
       <TouchableOpacity
@@ -430,6 +454,19 @@ export function HabitTrackerScreen() {
               >
                 {item.name}
               </Text>
+              {streakBadge && (
+                <View style={[
+                  styles.statusBadge,
+                  { backgroundColor: currentTheme.colors[1] }
+                ]}>
+                  <Text style={[
+                    styles.statusBadgeText,
+                    { color: currentTheme.textSecondary }
+                  ]}>
+                    {streakBadge}
+                  </Text>
+                </View>
+              )}
               {statusBadge && (
                 <View style={[
                   styles.statusBadge,
@@ -450,6 +487,14 @@ export function HabitTrackerScreen() {
             ]}>
               {getHabitFrequencyText(item)}
             </Text>
+            {showBestStreak && (
+              <Text style={[
+                styles.bestStreakText,
+                { color: currentTheme.textSecondary }
+              ]}>
+                Best streak: {item.bestStreak} {item.frequency === 'weekly' ? 'week' : 'day'}{item.bestStreak === 1 ? '' : 's'}
+              </Text>
+            )}
           </View>
         </View>
       </TouchableOpacity>
@@ -580,6 +625,17 @@ export function HabitTrackerScreen() {
                       📝 Practice Memorizing
                     </Text>
                   </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.practiceMemorizingButton,
+                      { borderColor: currentTheme.accent }
+                    ]}
+                    onPress={() => setQuizModalVisible(true)}
+                  >
+                    <Text style={[styles.practiceMemorizingButtonText, { color: currentTheme.accent }]}>
+                      🧩 Daily Quiz
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               </>
             )}
@@ -610,6 +666,12 @@ export function HabitTrackerScreen() {
         verseOfTheDay={verseOfTheDay}
         memorizeHabitCompletedToday={memorizeHabit ? memorizeHabit.completedToday : true}
         onPracticeComplete={handleVersePracticeComplete}
+      />
+
+      <DailyQuizModal
+        visible={quizModalVisible}
+        onClose={() => setQuizModalVisible(false)}
+        verseOfTheDay={verseOfTheDay}
       />
     </View>
   );
@@ -730,6 +792,10 @@ const styles = StyleSheet.create({
   },
   habitFrequency: {
     fontSize: 14,
+  },
+  bestStreakText: {
+    fontSize: 12,
+    marginTop: 2,
   },
   verseCard: {
     borderRadius: 16,

@@ -37,10 +37,18 @@ export function DashboardScreen() {
   const [monthData, setMonthData] = useState<Map<number, boolean[]>>(new Map());
   const [premiumModalVisible, setPremiumModalVisible] = useState(false);
   const [premiumFeature, setPremiumFeature] = useState('');
+  const [weekSummary, setWeekSummary] = useState({
+    dailyCompleted: 0,
+    dailyTotal: 0,
+    weeklyCompleted: 0,
+    weeklyTotal: 0,
+  });
+  const [prayerStats, setPrayerStats] = useState({ answered: 0, total: 0 });
 
   useFocusEffect(
     React.useCallback(() => {
       loadHabits();
+      loadPrayerStats();
     }, [])
   );
 
@@ -52,12 +60,67 @@ export function DashboardScreen() {
     }
   }, [habits, selectedWeekStart, selectedMonth, selectedView]);
 
+  useEffect(() => {
+    loadWeekSummary(habits);
+  }, [habits]);
+
   const loadHabits = async () => {
     try {
       const data = await db.getHabits();
       setHabits(data);
     } catch (error) {
       console.error('Error loading habits:', error);
+    }
+  };
+
+  const loadWeekSummary = async (habitsList: Habit[]) => {
+    try {
+      const today = new Date();
+      const weekStart = getLastSunday(today);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 6);
+
+      const weekStartStr = weekStart.toISOString().split('T')[0];
+      const weekEndStr = weekEnd.toISOString().split('T')[0];
+      const todayStr = today.toISOString().split('T')[0];
+      const daysElapsed = Math.floor((today.getTime() - weekStart.getTime()) / 86400000) + 1;
+
+      const dailyHabits = habitsList.filter(h => !h.frequency || h.frequency === 'daily');
+      const weeklyHabits = habitsList.filter(h => h.frequency === 'weekly');
+
+      let dailyCompleted = 0;
+      for (const habit of dailyHabits) {
+        const logs = await db.getHabitLogs(habit.id, weekStartStr, todayStr);
+        dailyCompleted += logs.filter(l => l.completed === 1).length;
+      }
+
+      let weeklyCompleted = 0;
+      for (const habit of weeklyHabits) {
+        const logs = await db.getHabitLogs(habit.id, weekStartStr, weekEndStr);
+        if (logs.some(l => l.completed === 1)) {
+          weeklyCompleted++;
+        }
+      }
+
+      setWeekSummary({
+        dailyCompleted,
+        dailyTotal: dailyHabits.length * daysElapsed,
+        weeklyCompleted,
+        weeklyTotal: weeklyHabits.length,
+      });
+    } catch (error) {
+      console.error('Error loading week summary:', error);
+    }
+  };
+
+  const loadPrayerStats = async () => {
+    try {
+      const entries = await db.getJournalEntries();
+      const prayers = entries.filter(e => e.type === 'prayer');
+      const answered = prayers.filter(e => !!e.answered).length;
+      setPrayerStats({ answered, total: prayers.length });
+    } catch (error) {
+      console.error('Error loading prayer stats:', error);
     }
   };
 
@@ -350,6 +413,34 @@ export function DashboardScreen() {
         </Text>
       </View>
 
+      {/* This Week Summary */}
+      <View style={styles.weekSummaryRow}>
+        <View style={[styles.weekSummaryTile, { backgroundColor: currentTheme.cardBackground }]}>
+          <Text style={[styles.weekSummaryValue, { color: currentTheme.accent }]}>
+            {weekSummary.dailyCompleted}/{weekSummary.dailyTotal}
+          </Text>
+          <Text style={[styles.weekSummaryLabel, { color: currentTheme.textSecondary }]}>
+            Daily Habits
+          </Text>
+        </View>
+        <View style={[styles.weekSummaryTile, { backgroundColor: currentTheme.cardBackground }]}>
+          <Text style={[styles.weekSummaryValue, { color: currentTheme.accent }]}>
+            {weekSummary.weeklyCompleted}/{weekSummary.weeklyTotal}
+          </Text>
+          <Text style={[styles.weekSummaryLabel, { color: currentTheme.textSecondary }]}>
+            Weekly Habits
+          </Text>
+        </View>
+        <View style={[styles.weekSummaryTile, { backgroundColor: currentTheme.cardBackground }]}>
+          <Text style={[styles.weekSummaryValue, { color: currentTheme.accent }]}>
+            {prayerStats.answered}/{prayerStats.total}
+          </Text>
+          <Text style={[styles.weekSummaryLabel, { color: currentTheme.textSecondary }]}>
+            Prayers Answered
+          </Text>
+        </View>
+      </View>
+
       {/* View Selector */}
       <View style={styles.viewSelector}>
         <TouchableOpacity
@@ -636,6 +727,28 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 16,
+  },
+  weekSummaryRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    gap: 10,
+    marginBottom: 16,
+  },
+  weekSummaryTile: {
+    flex: 1,
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  weekSummaryValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  weekSummaryLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   viewSelector: {
     flexDirection: 'row',
