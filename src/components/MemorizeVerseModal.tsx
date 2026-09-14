@@ -14,16 +14,35 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
 import { db, MemoryVerse } from '../database/database';
 import { verses, VerseOfTheDay } from '../utils/verses';
-import { fetchVerseFromBible, normalizeReference } from '../utils/bibleApi';
+import { fetchVersesFromBible, normalizeReference } from '../utils/bibleApi';
 
 const HIDE_LEVELS = [0, 25, 50, 75, 100];
 
-function getBlankedText(text: string, percent: number): string {
-  if (percent === 0) return text;
+function isVerseNumberToken(word: string): boolean {
+  return /^\d+$/.test(word);
+}
 
-  const words = text.split(' ');
+interface VerseLine {
+  number: string | null;
+  body: string;
+}
+
+function splitVerseNumber(line: string): VerseLine {
+  const words = line.split(' ').filter(w => w.length > 0);
+  if (words.length > 0 && isVerseNumberToken(words[0])) {
+    return { number: words[0], body: words.slice(1).join(' ') };
+  }
+  return { number: null, body: line };
+}
+
+function blankWords(body: string, percent: number): string {
+  if (percent === 0) return body;
+
+  const words = body.split(' ').filter(w => w.length > 0);
+  if (words.length === 0) return body;
+
   const hideCount = Math.round(words.length * (percent / 100));
-  if (hideCount === 0) return text;
+  if (hideCount === 0) return body;
 
   const step = words.length / hideCount;
   const hideIndices = new Set<number>();
@@ -34,11 +53,26 @@ function getBlankedText(text: string, percent: number): string {
   return words
     .map((word, index) => {
       if (!hideIndices.has(index)) return word;
+
       const lettersOnly = word.replace(/[^a-zA-Z]/g, '');
       const blankLength = Math.max(lettersOnly.length, 3);
+
+      if (percent === 100) {
+        return (lettersOnly.charAt(0) || word.charAt(0) || '').toUpperCase();
+      }
+
       return '_'.repeat(blankLength);
     })
     .join(' ');
+}
+
+function getVerseLines(text: string, percent: number): VerseLine[] {
+  // Each verse (line) is processed independently so a verse's leading
+  // number is always recognized, kept visible, and rendered bold.
+  return text.split('\n').map(line => {
+    const { number, body } = splitVerseNumber(line);
+    return { number, body: blankWords(body, percent) };
+  });
 }
 
 interface MemorizeVerseModalProps {
@@ -100,8 +134,8 @@ export function MemorizeVerseModal({
   };
 
   const handleLookupVerse = async () => {
-    if (!lookupBook.trim() || !lookupChapter.trim() || !lookupVerse.trim()) {
-      Alert.alert('Missing Info', 'Please enter the book, chapter, and verse.');
+    if (!lookupBook.trim() || !lookupChapter.trim()) {
+      Alert.alert('Missing Info', 'Please enter at least the book and chapter (verse is optional).');
       return;
     }
 
@@ -110,19 +144,31 @@ export function MemorizeVerseModal({
     setLookupLoading(true);
 
     try {
-      const queryReference = `${lookupBook} ${lookupChapter}:${lookupVerse}`;
-      const normalizedQuery = normalizeReference(queryReference);
-      const localMatch = verses.find(v => normalizeReference(v.reference) === normalizedQuery);
+      const verseSpec = lookupVerse.trim();
+      const isSingleVerse = /^\d+$/.test(verseSpec);
 
-      if (localMatch) {
-        setLookupResult({ reference: localMatch.reference, text: localMatch.text, fromInternet: false });
-      } else {
-        const fetched = await fetchVerseFromBible(lookupBook, lookupChapter, lookupVerse);
-        setLookupResult({ reference: fetched.reference, text: fetched.text, fromInternet: true });
+      if (isSingleVerse) {
+        const queryReference = `${lookupBook} ${lookupChapter}:${verseSpec}`;
+        const normalizedQuery = normalizeReference(queryReference);
+        const localMatch = verses.find(v => normalizeReference(v.reference) === normalizedQuery);
+
+        if (localMatch) {
+          setLookupResult({
+            reference: localMatch.reference,
+            text: `${verseSpec} ${localMatch.text}`,
+            fromInternet: false,
+          });
+          return;
+        }
       }
+
+      // Single verse not in the local bank, a verse range, or no verse
+      // (whole chapter) - all handled the same way, one verse per line.
+      const fetched = await fetchVersesFromBible(lookupBook, lookupChapter, verseSpec || undefined);
+      setLookupResult({ reference: fetched.reference, text: fetched.text, fromInternet: true });
     } catch (error) {
       console.error('Error looking up verse:', error);
-      setLookupError('Could not find that verse. Check the book, chapter, and verse and try again.');
+      setLookupError('Could not find that. Check the book, chapter, and verse and try again.');
     } finally {
       setLookupLoading(false);
     }
@@ -200,7 +246,7 @@ export function MemorizeVerseModal({
       >
         <View style={[styles.header, { backgroundColor: currentTheme.cardBackground }]}>
           <Text style={[styles.headerTitle, { color: currentTheme.textPrimary }]}>
-            Memorize a Verse
+            Practice Memorization
           </Text>
           <TouchableOpacity onPress={onClose}>
             <Text style={[styles.closeButton, { color: currentTheme.accent }]}>Close</Text>
@@ -285,7 +331,10 @@ export function MemorizeVerseModal({
             </View>
 
             <Text style={[styles.sectionLabel, { color: currentTheme.textPrimary }]}>
-              Look Up a Specific Verse
+              Verse Lookup
+            </Text>
+            <Text style={[styles.lookupHint, { color: currentTheme.textSecondary }]}>
+              Enter a verse (16), a range (16-18), or leave blank for the whole chapter
             </Text>
             <View style={styles.lookupRow}>
               <TextInput
@@ -318,7 +367,7 @@ export function MemorizeVerseModal({
                 placeholderTextColor={currentTheme.textSecondary}
                 value={lookupVerse}
                 onChangeText={setLookupVerse}
-                keyboardType="number-pad"
+                keyboardType="default"
               />
             </View>
             <TouchableOpacity
@@ -492,9 +541,18 @@ export function MemorizeVerseModal({
             </Text>
 
             <View style={[styles.practiceCard, { backgroundColor: currentTheme.cardBackground }]}>
-              <Text style={[styles.verseText, { color: currentTheme.textPrimary }]}>
-                "{showAnswer ? activeVerse.text : getBlankedText(activeVerse.text, hidePercent)}"
-              </Text>
+              {getVerseLines(activeVerse.text, showAnswer ? 0 : hidePercent).map((line, index, lines) => (
+                <Text key={index} style={[styles.verseText, { color: currentTheme.textPrimary }]}>
+                  {index === 0 ? '"' : ''}
+                  {line.number && (
+                    <Text style={[styles.verseNumberBold, { color: currentTheme.textPrimary }]}>
+                      {line.number}.{' '}
+                    </Text>
+                  )}
+                  {line.body}
+                  {index === lines.length - 1 ? '"' : ''}
+                </Text>
+              ))}
             </View>
 
             <Text style={[styles.sectionLabel, { color: currentTheme.textPrimary }]}>
@@ -617,6 +675,9 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     fontStyle: 'italic',
   },
+  verseNumberBold: {
+    fontWeight: 'bold',
+  },
   verseActions: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -649,6 +710,10 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 14,
     marginBottom: 12,
+  },
+  lookupHint: {
+    fontSize: 12,
+    marginBottom: 10,
   },
   lookupRow: {
     flexDirection: 'row',
