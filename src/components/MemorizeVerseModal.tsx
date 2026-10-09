@@ -12,9 +12,12 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
+import { usePremium } from '../context/PremiumContext';
 import { db, MemoryVerse } from '../database/database';
 import { verses, VerseOfTheDay } from '../utils/verses';
 import { fetchVersesFromBible, normalizeReference } from '../utils/bibleApi';
+import { getVerseReviewInfo } from '../utils/verseReview';
+import { PremiumModal } from './PremiumModal';
 
 const HIDE_LEVELS = [0, 25, 50, 75, 100];
 
@@ -93,8 +96,10 @@ export function MemorizeVerseModal({
   onPracticeComplete,
 }: MemorizeVerseModalProps) {
   const { currentTheme } = useTheme();
+  const { isPremium } = usePremium();
   const insets = useSafeAreaInsets();
   const [view, setView] = useState<ModalView>('browse');
+  const [reviewPremiumModalVisible, setReviewPremiumModalVisible] = useState(false);
   const [previousView, setPreviousView] = useState<ModalView>('browse');
   const [savedVerses, setSavedVerses] = useState<MemoryVerse[]>([]);
   const [searchText, setSearchText] = useState('');
@@ -232,7 +237,15 @@ export function MemorizeVerseModal({
       )
     : [];
 
+  const dueVerseIds = new Set(
+    isPremium ? savedVerses.filter(v => getVerseReviewInfo(v).isDue).map(v => v.id) : []
+  );
+  const sortedSavedVerses = isPremium
+    ? [...savedVerses].sort((a, b) => Number(dueVerseIds.has(b.id)) - Number(dueVerseIds.has(a.id)))
+    : savedVerses;
+
   return (
+    <>
     <Modal visible={visible} animationType="slide" transparent>
       <View
         style={[
@@ -469,12 +482,33 @@ export function MemorizeVerseModal({
 
         {view === 'saved' && (
           <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+            {isPremium ? (
+              dueVerseIds.size > 0 && (
+                <View style={[styles.reviewBanner, { backgroundColor: currentTheme.cardBackground }]}>
+                  <Text style={[styles.reviewBannerText, { color: currentTheme.textPrimary }]}>
+                    🔔 {dueVerseIds.size} verse{dueVerseIds.size === 1 ? '' : 's'} due for review
+                  </Text>
+                </View>
+              )
+            ) : (
+              savedVerses.length > 0 && (
+                <TouchableOpacity
+                  style={[styles.reviewBanner, { backgroundColor: currentTheme.cardBackground }]}
+                  onPress={() => setReviewPremiumModalVisible(true)}
+                >
+                  <Text style={[styles.reviewBannerText, { color: currentTheme.textPrimary }]}>
+                    👑 Unlock Smart Review Reminders
+                  </Text>
+                </TouchableOpacity>
+              )
+            )}
+
             {savedVerses.length === 0 ? (
               <Text style={[styles.emptyText, { color: currentTheme.textSecondary }]}>
                 No verses saved yet. Add one from the Browse tab to start memorizing.
               </Text>
             ) : (
-              savedVerses.map((verse) => (
+              sortedSavedVerses.map((verse) => (
                 <View
                   key={verse.id}
                   style={[styles.savedCard, { backgroundColor: currentTheme.cardBackground }]}
@@ -483,20 +517,29 @@ export function MemorizeVerseModal({
                     <Text style={[styles.verseReference, { color: currentTheme.accent }]}>
                       {verse.reference}
                     </Text>
-                    <View
-                      style={[
-                        styles.statusBadge,
-                        { backgroundColor: verse.status === 'mastered' ? currentTheme.accent : currentTheme.colors[1] },
-                      ]}
-                    >
-                      <Text
+                    <View style={styles.savedCardBadges}>
+                      {dueVerseIds.has(verse.id) && (
+                        <View style={[styles.statusBadge, { backgroundColor: '#F59E0B' }]}>
+                          <Text style={[styles.statusBadgeText, { color: '#FFFFFF' }]}>
+                            🔔 Due
+                          </Text>
+                        </View>
+                      )}
+                      <View
                         style={[
-                          styles.statusBadgeText,
-                          { color: verse.status === 'mastered' ? '#FFFFFF' : currentTheme.textSecondary },
+                          styles.statusBadge,
+                          { backgroundColor: verse.status === 'mastered' ? currentTheme.accent : currentTheme.colors[1] },
                         ]}
                       >
-                        {verse.status === 'mastered' ? 'Mastered' : 'Learning'}
-                      </Text>
+                        <Text
+                          style={[
+                            styles.statusBadgeText,
+                            { color: verse.status === 'mastered' ? '#FFFFFF' : currentTheme.textSecondary },
+                          ]}
+                        >
+                          {verse.status === 'mastered' ? 'Mastered' : 'Learning'}
+                        </Text>
+                      </View>
                     </View>
                   </View>
                   <Text style={[styles.verseText, { color: currentTheme.textPrimary }]}>
@@ -606,6 +649,13 @@ export function MemorizeVerseModal({
         )}
       </View>
     </Modal>
+
+    <PremiumModal
+      visible={reviewPremiumModalVisible}
+      onClose={() => setReviewPremiumModalVisible(false)}
+      feature="Smart Review Reminders"
+    />
+    </>
   );
 }
 
@@ -779,6 +829,20 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
+  },
+  savedCardBadges: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  reviewBanner: {
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 14,
+    alignItems: 'center',
+  },
+  reviewBannerText: {
+    fontSize: 14,
+    fontWeight: '700',
   },
   statusBadge: {
     paddingHorizontal: 10,

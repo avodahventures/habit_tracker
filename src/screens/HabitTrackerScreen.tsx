@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
+import { usePremium } from '../context/PremiumContext';
 import { db, Habit } from '../database/database';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import {
@@ -24,6 +25,8 @@ import { NotificationBanner } from '../components/NotificationBanner';
 import { getVerseOfTheDay, VerseOfTheDay } from '../utils/verses';
 import { MemorizeVerseModal } from '../components/MemorizeVerseModal';
 import { DailyQuizModal } from '../components/DailyQuizModal';
+import { DEFAULT_REMINDER_HOURS, getReminderHours } from '../utils/reminderSettings';
+import { countDueVerses } from '../utils/verseReview';
 
 interface HabitWithCompletion extends Habit {
   completedToday: boolean;
@@ -61,6 +64,7 @@ function getNotificationShownKey(hour: number): string {
 
 export function HabitTrackerScreen() {
   const { currentTheme } = useTheme();
+  const { isPremium } = usePremium();
   const navigation = useNavigation();
   const [dailyHabits, setDailyHabits] = useState<HabitWithCompletion[]>([]);
   const [weeklyHabits, setWeeklyHabits] = useState<HabitWithCompletion[]>([]);
@@ -72,24 +76,28 @@ export function HabitTrackerScreen() {
   const [isMini, setIsMini] = useState(false);
   const [memorizeModalVisible, setMemorizeModalVisible] = useState(false);
   const [quizModalVisible, setQuizModalVisible] = useState(false);
+  const [dueVerseCount, setDueVerseCount] = useState(0);
 
   const shownNotifications = useRef<Set<string>>(new Set());
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const appStateRef = useRef(AppState.currentState);
+  const reminderHoursRef = useRef<number[]>(DEFAULT_REMINDER_HOURS);
 
   useFocusEffect(
     React.useCallback(() => {
       loadHabits();
+      loadDueVerseCount();
       startTimeCheck();
 
       return () => {
         stopTimeCheck();
       };
-    }, [])
+    }, [isPremium])
   );
 
-  const startTimeCheck = () => {
+  const startTimeCheck = async () => {
     stopTimeCheck();
+    reminderHoursRef.current = await getReminderHours();
 
     checkTimeAndShowBanner();
 
@@ -115,23 +123,18 @@ export function HabitTrackerScreen() {
   };
 
   const checkTimeAndShowBanner = async () => {
-    const isNoon = isNearHour(12);
-    const isEvening = isNearHour(18);
-    const noonKey = getNotificationShownKey(12);
-    const eveningKey = getNotificationShownKey(18);
+    for (const hour of reminderHoursRef.current) {
+      if (!isNearHour(hour)) continue;
 
-    if (isNoon && !shownNotifications.current.has(noonKey)) {
+      const key = getNotificationShownKey(hour);
+      if (shownNotifications.current.has(key)) continue;
+
       const notification = await checkHabitsAndNotify();
       if (notification && !notification.title.includes('🎉')) {
-        shownNotifications.current.add(noonKey);
+        shownNotifications.current.add(key);
         showBanner(notification, false, false);
       }
-    } else if (isEvening && !shownNotifications.current.has(eveningKey)) {
-      const notification = await checkHabitsAndNotify();
-      if (notification && !notification.title.includes('🎉')) {
-        shownNotifications.current.add(eveningKey);
-        showBanner(notification, false, false);
-      }
+      break;
     }
   };
 
@@ -145,6 +148,19 @@ export function HabitTrackerScreen() {
     setIsMini(mini);
     setBanner(notification);
     setBannerVisible(true);
+  };
+
+  const loadDueVerseCount = async () => {
+    if (!isPremium) {
+      setDueVerseCount(0);
+      return;
+    }
+    try {
+      const memoryVerses = await db.getMemoryVerses();
+      setDueVerseCount(countDueVerses(memoryVerses));
+    } catch (error) {
+      console.error('Error loading verse review count:', error);
+    }
   };
 
   const loadHabits = async () => {
@@ -622,7 +638,7 @@ export function HabitTrackerScreen() {
                     onPress={() => setMemorizeModalVisible(true)}
                   >
                     <Text style={[styles.practiceMemorizingButtonText, { color: currentTheme.accent }]}>
-                      📝 Practice Memorizing
+                      📝 Practice Memorizing{dueVerseCount > 0 ? ` (${dueVerseCount} due)` : ''}
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -662,7 +678,10 @@ export function HabitTrackerScreen() {
 
       <MemorizeVerseModal
         visible={memorizeModalVisible}
-        onClose={() => setMemorizeModalVisible(false)}
+        onClose={() => {
+          setMemorizeModalVisible(false);
+          loadDueVerseCount();
+        }}
         verseOfTheDay={verseOfTheDay}
         memorizeHabitCompletedToday={memorizeHabit ? memorizeHabit.completedToday : true}
         onPracticeComplete={handleVersePracticeComplete}

@@ -8,6 +8,7 @@ import { usePremium } from '../context/PremiumContext';
 import { themes, ThemeType } from '../utils/themes';
 import { db, Habit } from '../database/database';
 import { DEFAULT_HABITS, DefaultHabit } from '../utils/defaultHabits';
+import { REMINDER_TIME_OPTIONS, getReminderHours, setReminderHours } from '../utils/reminderSettings';
 
 const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -26,12 +27,15 @@ export function SettingsScreen() {
 
   // Collapsible state
   const [themeExpanded, setThemeExpanded] = useState(false);
+  const [remindersExpanded, setRemindersExpanded] = useState(false);
   const [habitsExpanded, setHabitsExpanded] = useState(true);
   const [premiumExpanded, setPremiumExpanded] = useState(false);
+  const [reminderHours, setReminderHoursState] = useState<number[]>([]);
 
   useFocusEffect(
     useCallback(() => {
       loadHabits();
+      loadReminderHours();
     }, [])
   );
 
@@ -42,6 +46,20 @@ export function SettingsScreen() {
     } catch (error) {
       console.error('Error loading habits:', error);
     }
+  };
+
+  const loadReminderHours = async () => {
+    const hours = await getReminderHours();
+    setReminderHoursState(hours);
+  };
+
+  const toggleReminderHour = async (hour: number) => {
+    const newHours = reminderHours.includes(hour)
+      ? reminderHours.filter(h => h !== hour)
+      : [...reminderHours, hour].sort((a, b) => a - b);
+
+    setReminderHoursState(newHours);
+    await setReminderHours(newHours);
   };
 
   const toggleDefaultHabit = async (defaultHabit: DefaultHabit) => {
@@ -353,6 +371,67 @@ export function SettingsScreen() {
                   </View>
                 </TouchableOpacity>
               ))}
+            </View>
+          )}
+        </View>
+
+        {/* Reminders Section - Collapsible */}
+        <View style={styles.section}>
+          <TouchableOpacity
+            style={[styles.sectionHeaderButton, { backgroundColor: currentTheme.cardBackground }]}
+            onPress={() => setRemindersExpanded(!remindersExpanded)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.sectionHeaderLeft}>
+              <Text style={[styles.sectionTitle, { color: currentTheme.textPrimary }]}>
+                🔔 Reminders
+              </Text>
+              <View style={[styles.badge, { backgroundColor: currentTheme.accent }]}>
+                <Text style={styles.badgeText}>{reminderHours.length}</Text>
+              </View>
+            </View>
+            <Text style={[styles.expandIcon, { color: currentTheme.textPrimary }]}>
+              {remindersExpanded ? '▼' : '▶'}
+            </Text>
+          </TouchableOpacity>
+
+          {remindersExpanded && (
+            <View style={styles.sectionContent}>
+              <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>
+                Choose when you'd like a gentle nudge about unfinished habits. Reminders show up in the
+                app while it's open, not as a phone notification.
+              </Text>
+
+              {REMINDER_TIME_OPTIONS.map((option) => {
+                const isSelected = reminderHours.includes(option.hour);
+                return (
+                  <TouchableOpacity
+                    key={option.hour}
+                    style={[
+                      styles.reminderOption,
+                      {
+                        backgroundColor: currentTheme.cardBackground,
+                        borderColor: isSelected ? currentTheme.accent : currentTheme.cardBorder,
+                        borderWidth: isSelected ? 2 : 1,
+                      },
+                    ]}
+                    onPress={() => toggleReminderHour(option.hour)}
+                  >
+                    <View
+                      style={[
+                        styles.defaultCheckbox,
+                        { borderColor: currentTheme.accent },
+                        isSelected && { backgroundColor: currentTheme.accent },
+                      ]}
+                    >
+                      {isSelected && <Text style={styles.checkmark}>✓</Text>}
+                    </View>
+                    <Text style={[styles.reminderOptionText, { color: currentTheme.textPrimary }]}>
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           )}
         </View>
@@ -788,6 +867,18 @@ const styles = StyleSheet.create({
   },
   defaultHabitsSection: {
     marginBottom: 20,
+  },
+  reminderOption: {
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  reminderOptionText: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginLeft: 12,
   },
   defaultHabitCard: {
     borderRadius: 12,

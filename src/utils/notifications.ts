@@ -64,7 +64,6 @@ export async function checkHabitsAndNotify(): Promise<NotificationMessage | null
     const remainingHabits = totalHabits - completedHabits;
 
     const currentHour = new Date().getHours();
-    const isNoon = currentHour === 12;
 
     if (remainingHabits === 0 && totalHabits > 0) {
       return {
@@ -74,7 +73,7 @@ export async function checkHabitsAndNotify(): Promise<NotificationMessage | null
     }
 
     if (remainingHabits > 0) {
-      return getEncouragementMessage(remainingHabits, isNoon);
+      return getEncouragementMessage(remainingHabits, currentHour);
     }
 
     return null;
@@ -137,7 +136,18 @@ function getWeekEnd(date: Date): Date {
   return weekEnd;
 }
 
-function getEncouragementMessage(remaining: number, isNoon: boolean): NotificationMessage {
+function getEncouragementMessage(remaining: number, currentHour: number): NotificationMessage {
+  const morningMessages = [
+    {
+      title: '🌅 Good Morning',
+      body: `You have ${remaining} spiritual habit${remaining > 1 ? 's' : ''} today. Start the day right with God!`,
+    },
+    {
+      title: '☀️ Rise and Shine',
+      body: `${remaining} habit${remaining > 1 ? 's' : ''} ahead of you today. Let's get started!`,
+    },
+  ];
+
   const noonMessages = [
     {
       title: '🙏 Gentle Reminder',
@@ -168,13 +178,9 @@ function getEncouragementMessage(remaining: number, isNoon: boolean): Notificati
     },
   ];
 
-  if (isNoon) {
-    const randomIndex = Math.floor(Math.random() * noonMessages.length);
-    return noonMessages[randomIndex];
-  } else {
-    const randomIndex = Math.floor(Math.random() * eveningMessages.length);
-    return eveningMessages[randomIndex];
-  }
+  const pool = currentHour < 12 ? morningMessages : currentHour < 17 ? noonMessages : eveningMessages;
+  const randomIndex = Math.floor(Math.random() * pool.length);
+  return pool[randomIndex];
 }
 
 export async function sendImmediateNotification(
