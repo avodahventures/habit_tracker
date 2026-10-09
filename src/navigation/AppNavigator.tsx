@@ -3,6 +3,7 @@ import { Text } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { HomeScreen } from '../screens/HomeScreen';
 import { HabitTrackerScreen } from '../screens/HabitTrackerScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
 import { JournalScreen } from '../screens/JournalScreen';
@@ -18,6 +19,7 @@ function MainTabs() {
 
   return (
     <Tab.Navigator
+      initialRouteName="Home"
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
@@ -28,6 +30,13 @@ function MainTabs() {
         tabBarInactiveTintColor: currentTheme.textSecondary,
       }}
     >
+      <Tab.Screen
+        name="Home"
+        component={HomeScreen}
+        options={{
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 24 }}>🏠</Text>,
+        }}
+      />
       <Tab.Screen
         name="Habits"
         component={HabitTrackerScreen}

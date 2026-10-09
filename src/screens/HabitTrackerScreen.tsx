@@ -6,14 +6,12 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
-  Linking,
   AppState,
   AppStateStatus,
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
-import { usePremium } from '../context/PremiumContext';
 import { db, Habit } from '../database/database';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import {
@@ -23,11 +21,9 @@ import {
 } from '../utils/notifications';
 import { NotificationBanner } from '../components/NotificationBanner';
 import { getVerseOfTheDay, VerseOfTheDay } from '../utils/verses';
-import { MemorizeVerseModal } from '../components/MemorizeVerseModal';
-import { DailyQuizModal } from '../components/DailyQuizModal';
 import { DEFAULT_REMINDER_HOURS, getReminderHours } from '../utils/reminderSettings';
-import { countDueVerses } from '../utils/verseReview';
 import { ShareProgressModal } from '../components/ShareProgressModal';
+import { getWeekStart, getWeekEnd, isHabitScheduledToday, canToggleWeeklyHabit } from '../utils/habitScheduling';
 
 interface HabitWithCompletion extends Habit {
   completedToday: boolean;
@@ -35,20 +31,6 @@ interface HabitWithCompletion extends Habit {
   isScheduledToday: boolean;
   currentStreak: number;
   bestStreak: number;
-}
-
-function getWeekStart(date: Date): Date {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day;
-  return new Date(d.setDate(diff));
-}
-
-function getWeekEnd(date: Date): Date {
-  const weekStart = getWeekStart(date);
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 6);
-  return weekEnd;
 }
 
 function isNearHour(targetHour: number): boolean {
@@ -65,7 +47,6 @@ function getNotificationShownKey(hour: number): string {
 
 export function HabitTrackerScreen() {
   const { currentTheme } = useTheme();
-  const { isPremium } = usePremium();
   const navigation = useNavigation();
   const [dailyHabits, setDailyHabits] = useState<HabitWithCompletion[]>([]);
   const [weeklyHabits, setWeeklyHabits] = useState<HabitWithCompletion[]>([]);
@@ -75,9 +56,6 @@ export function HabitTrackerScreen() {
   const [bannerVisible, setBannerVisible] = useState(false);
   const [isCelebration, setIsCelebration] = useState(false);
   const [isMini, setIsMini] = useState(false);
-  const [memorizeModalVisible, setMemorizeModalVisible] = useState(false);
-  const [quizModalVisible, setQuizModalVisible] = useState(false);
-  const [dueVerseCount, setDueVerseCount] = useState(0);
   const [shareModalVisible, setShareModalVisible] = useState(false);
 
   const shownNotifications = useRef<Set<string>>(new Set());
@@ -88,13 +66,12 @@ export function HabitTrackerScreen() {
   useFocusEffect(
     React.useCallback(() => {
       loadHabits();
-      loadDueVerseCount();
       startTimeCheck();
 
       return () => {
         stopTimeCheck();
       };
-    }, [isPremium])
+    }, [])
   );
 
   const startTimeCheck = async () => {
@@ -150,19 +127,6 @@ export function HabitTrackerScreen() {
     setIsMini(mini);
     setBanner(notification);
     setBannerVisible(true);
-  };
-
-  const loadDueVerseCount = async () => {
-    if (!isPremium) {
-      setDueVerseCount(0);
-      return;
-    }
-    try {
-      const memoryVerses = await db.getMemoryVerses();
-      setDueVerseCount(countDueVerses(memoryVerses));
-    } catch (error) {
-      console.error('Error loading verse review count:', error);
-    }
   };
 
   const loadHabits = async () => {
@@ -289,43 +253,6 @@ export function HabitTrackerScreen() {
     });
   };
 
-  const isHabitScheduledToday = (habit: Habit): boolean => {
-    if (!habit.frequency || habit.frequency === 'daily') {
-      return true;
-    }
-    if (habit.frequency === 'weekly') {
-      if (!habit.weekday || habit.weekday === 'Any weekday') {
-        return true;
-      }
-      const today = new Date();
-      const weekdays = [
-        'Sunday', 'Monday', 'Tuesday', 'Wednesday',
-        'Thursday', 'Friday', 'Saturday',
-      ];
-      const todayName = weekdays[today.getDay()];
-      return todayName === habit.weekday;
-    }
-    return true;
-  };
-
-  const canToggleWeeklyHabit = (habit: HabitWithCompletion): boolean => {
-    if (habit.frequency !== 'weekly') {
-      return true;
-    }
-    if (!habit.weekday || habit.weekday === 'Any weekday') {
-      return !habit.completedThisWeek;
-    }
-    return habit.isScheduledToday;
-  };
-
-  const memorizeHabit = [...dailyHabits, ...weeklyHabits].find(h => h.name === 'Memorize a Verse');
-
-  const handleVersePracticeComplete = () => {
-    if (memorizeHabit && !memorizeHabit.completedToday && canToggleWeeklyHabit(memorizeHabit)) {
-      toggleHabit(memorizeHabit);
-    }
-  };
-
   const allHabits = [...dailyHabits, ...weeklyHabits];
   const toggleableHabitsToday = allHabits.filter(h => canToggleWeeklyHabit(h));
   const completedHabitsToday = toggleableHabitsToday.filter(h => h.completedToday).length;
@@ -373,17 +300,6 @@ export function HabitTrackerScreen() {
       }
     } catch (error) {
       console.error('Error toggling habit:', error);
-    }
-  };
-
-  const openBibleGateway = async (url: string) => {
-    try {
-      const supported = await Linking.canOpenURL(url);
-      if (supported) {
-        await Linking.openURL(url);
-      }
-    } catch (error) {
-      console.error('Error opening Bible Gateway:', error);
     }
   };
 
@@ -605,67 +521,6 @@ export function HabitTrackerScreen() {
                     ))}
                   </View>
                 )}
-
-                {/* Verse of the Day */}
-                <View style={[
-                  styles.verseCard,
-                  { backgroundColor: currentTheme.cardBackground }
-                ]}>
-                  <View style={styles.verseHeader}>
-                    <Text style={styles.verseIcon}>📖</Text>
-                    <Text style={[
-                      styles.verseTitle,
-                      { color: currentTheme.textPrimary }
-                    ]}>
-                      Verse of the Day
-                    </Text>
-                  </View>
-                  <Text style={[
-                    styles.verseReference,
-                    { color: currentTheme.accent }
-                  ]}>
-                    {verseOfTheDay.reference} (KJV)
-                  </Text>
-                  <Text style={[
-                    styles.verseText,
-                    { color: currentTheme.textPrimary }
-                  ]}>
-                    "{verseOfTheDay.text}"
-                  </Text>
-                  <TouchableOpacity
-                    style={[
-                      styles.bibleGatewayButton,
-                      { backgroundColor: currentTheme.accent }
-                    ]}
-                    onPress={() => openBibleGateway(verseOfTheDay.bibleGatewayUrl)}
-                  >
-                    <Text style={styles.bibleGatewayButtonText}>
-                      Read Full Chapter on Bible Gateway 🔗
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.practiceMemorizingButton,
-                      { borderColor: currentTheme.accent }
-                    ]}
-                    onPress={() => setMemorizeModalVisible(true)}
-                  >
-                    <Text style={[styles.practiceMemorizingButtonText, { color: currentTheme.accent }]}>
-                      📝 Practice Memorizing{dueVerseCount > 0 ? ` (${dueVerseCount} due)` : ''}
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.practiceMemorizingButton,
-                      { borderColor: currentTheme.accent }
-                    ]}
-                    onPress={() => setQuizModalVisible(true)}
-                  >
-                    <Text style={[styles.practiceMemorizingButtonText, { color: currentTheme.accent }]}>
-                      🧩 Daily Quiz
-                    </Text>
-                  </TouchableOpacity>
-                </View>
               </>
             )}
           />
@@ -688,23 +543,6 @@ export function HabitTrackerScreen() {
           }}
         />
       )}
-
-      <MemorizeVerseModal
-        visible={memorizeModalVisible}
-        onClose={() => {
-          setMemorizeModalVisible(false);
-          loadDueVerseCount();
-        }}
-        verseOfTheDay={verseOfTheDay}
-        memorizeHabitCompletedToday={memorizeHabit ? memorizeHabit.completedToday : true}
-        onPracticeComplete={handleVersePracticeComplete}
-      />
-
-      <DailyQuizModal
-        visible={quizModalVisible}
-        onClose={() => setQuizModalVisible(false)}
-        verseOfTheDay={verseOfTheDay}
-      />
 
       <ShareProgressModal
         visible={shareModalVisible}
@@ -838,58 +676,5 @@ const styles = StyleSheet.create({
   bestStreakText: {
     fontSize: 12,
     marginTop: 2,
-  },
-  verseCard: {
-    borderRadius: 16,
-    padding: 20,
-    marginTop: 8,
-    marginBottom: 8,
-  },
-  verseHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  verseIcon: {
-    fontSize: 24,
-    marginRight: 8,
-  },
-  verseTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  verseReference: {
-    fontSize: 15,
-    fontWeight: '700',
-    marginBottom: 12,
-  },
-  verseText: {
-    fontSize: 16,
-    lineHeight: 24,
-    fontStyle: 'italic',
-    marginBottom: 16,
-  },
-  bibleGatewayButton: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  bibleGatewayButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  practiceMemorizingButton: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    borderWidth: 1,
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  practiceMemorizingButtonText: {
-    fontSize: 14,
-    fontWeight: 'bold',
   },
 });
