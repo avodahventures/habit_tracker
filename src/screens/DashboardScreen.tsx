@@ -82,17 +82,15 @@ export function DashboardScreen() {
 
       const weekStartStr = weekStart.toISOString().split('T')[0];
       const weekEndStr = weekEnd.toISOString().split('T')[0];
-      const todayStr = today.toISOString().split('T')[0];
-      const daysElapsed = Math.floor((today.getTime() - weekStart.getTime()) / 86400000) + 1;
 
       const dailyHabits = habitsList.filter(h => !h.frequency || h.frequency === 'daily');
       const weeklyHabits = habitsList.filter(h => h.frequency === 'weekly');
 
-      let dailyCompleted = 0;
-      for (const habit of dailyHabits) {
-        const logs = await db.getHabitLogs(habit.id, weekStartStr, todayStr);
-        dailyCompleted += logs.filter(l => l.completed === 1).length;
-      }
+      const todayLogs = await db.getTodayLogs();
+      const completedTodayIds = new Set(
+        todayLogs.filter(l => l.completed === 1).map(l => l.habitId)
+      );
+      const dailyCompleted = dailyHabits.filter(h => completedTodayIds.has(h.id)).length;
 
       let weeklyCompleted = 0;
       for (const habit of weeklyHabits) {
@@ -104,7 +102,7 @@ export function DashboardScreen() {
 
       setWeekSummary({
         dailyCompleted,
-        dailyTotal: dailyHabits.length * daysElapsed,
+        dailyTotal: dailyHabits.length,
         weeklyCompleted,
         weeklyTotal: weeklyHabits.length,
       });

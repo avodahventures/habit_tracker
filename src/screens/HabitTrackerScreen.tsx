@@ -27,6 +27,7 @@ import { MemorizeVerseModal } from '../components/MemorizeVerseModal';
 import { DailyQuizModal } from '../components/DailyQuizModal';
 import { DEFAULT_REMINDER_HOURS, getReminderHours } from '../utils/reminderSettings';
 import { countDueVerses } from '../utils/verseReview';
+import { ShareProgressModal } from '../components/ShareProgressModal';
 
 interface HabitWithCompletion extends Habit {
   completedToday: boolean;
@@ -77,6 +78,7 @@ export function HabitTrackerScreen() {
   const [memorizeModalVisible, setMemorizeModalVisible] = useState(false);
   const [quizModalVisible, setQuizModalVisible] = useState(false);
   const [dueVerseCount, setDueVerseCount] = useState(0);
+  const [shareModalVisible, setShareModalVisible] = useState(false);
 
   const shownNotifications = useRef<Set<string>>(new Set());
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -324,6 +326,11 @@ export function HabitTrackerScreen() {
     }
   };
 
+  const allHabits = [...dailyHabits, ...weeklyHabits];
+  const toggleableHabitsToday = allHabits.filter(h => canToggleWeeklyHabit(h));
+  const completedHabitsToday = toggleableHabitsToday.filter(h => h.completedToday).length;
+  const bestCurrentStreak = allHabits.reduce((max, h) => Math.max(max, h.currentStreak), 0);
+
   const toggleHabit = async (habit: HabitWithCompletion) => {
     if (!canToggleWeeklyHabit(habit)) {
       return;
@@ -533,11 +540,17 @@ export function HabitTrackerScreen() {
   return (
     <View style={[styles.container, { backgroundColor: currentTheme.colors[0] }]}>
       <SafeAreaView style={styles.safeArea}>
-        {/* Header with Manage Habits Info Button */}
+        {/* Header with Share and Manage Habits Info Buttons */}
         <View style={styles.header}>
           <Text style={[styles.title, { color: currentTheme.textPrimary }]}>
             Today's Habits
           </Text>
+          <TouchableOpacity
+            style={styles.infoButton}
+            onPress={() => setShareModalVisible(true)}
+          >
+            <Text style={styles.infoButtonIcon}>📤</Text>
+          </TouchableOpacity>
           <TouchableOpacity
             style={styles.infoButton}
             onPress={showManageHabitsInfo}
@@ -692,6 +705,15 @@ export function HabitTrackerScreen() {
         onClose={() => setQuizModalVisible(false)}
         verseOfTheDay={verseOfTheDay}
       />
+
+      <ShareProgressModal
+        visible={shareModalVisible}
+        onClose={() => setShareModalVisible(false)}
+        totalHabits={toggleableHabitsToday.length}
+        completedHabits={completedHabitsToday}
+        bestStreak={bestCurrentStreak}
+        verseReference={verseOfTheDay.reference}
+      />
     </View>
   );
 }
@@ -714,6 +736,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 4,
   },
   title: {
     fontSize: 32,
