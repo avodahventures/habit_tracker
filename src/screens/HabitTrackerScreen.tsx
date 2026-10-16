@@ -23,6 +23,7 @@ import { NotificationBanner } from '../components/NotificationBanner';
 import { getVerseOfTheDay, VerseOfTheDay } from '../utils/verses';
 import { DEFAULT_REMINDER_HOURS, getReminderHours } from '../utils/reminderSettings';
 import { ShareProgressModal } from '../components/ShareProgressModal';
+import { recordFullCelebrationAndMaybePromptReview } from '../utils/reviewPrompt';
 import { getWeekStart, getWeekEnd, isHabitScheduledToday, canToggleWeeklyHabit } from '../utils/habitScheduling';
 
 interface HabitWithCompletion extends Habit {
@@ -278,6 +279,7 @@ export function HabitTrackerScreen() {
         if (notification && notification.title.includes('🎉')) {
           // All habits done - show full celebration
           showBanner(notification, true, false);
+          recordFullCelebrationAndMaybePromptReview();
         } else {
           // Show mini celebration for partial completion
           const allHabits = [...dailyHabits, ...weeklyHabits];

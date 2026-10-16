@@ -9,6 +9,7 @@ import { themes, ThemeType } from '../utils/themes';
 import { db, Habit } from '../database/database';
 import { DEFAULT_HABITS, DefaultHabit } from '../utils/defaultHabits';
 import { REMINDER_TIME_OPTIONS, getReminderHours, setReminderHours } from '../utils/reminderSettings';
+import { scheduleHabitReminders } from '../utils/pushNotifications';
 
 const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -60,6 +61,14 @@ export function SettingsScreen() {
 
     setReminderHoursState(newHours);
     await setReminderHours(newHours);
+
+    const scheduled = await scheduleHabitReminders(newHours);
+    if (!scheduled && newHours.length > 0) {
+      Alert.alert(
+        'Notifications Disabled',
+        'Reminders are saved, but you\'ll need to enable notifications for this app in your device Settings to actually receive them.'
+      );
+    }
   };
 
   const toggleDefaultHabit = async (defaultHabit: DefaultHabit) => {
@@ -398,8 +407,8 @@ export function SettingsScreen() {
           {remindersExpanded && (
             <View style={styles.sectionContent}>
               <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>
-                Choose when you'd like a gentle nudge about unfinished habits. Reminders show up in the
-                app while it's open, not as a phone notification.
+                Choose when you'd like a gentle nudge about unfinished habits. We'll send a phone
+                notification at each selected time (you may be asked to allow notifications).
               </Text>
 
               {REMINDER_TIME_OPTIONS.map((option) => {

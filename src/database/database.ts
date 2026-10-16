@@ -49,6 +49,14 @@ export interface MemoryVerse {
   createdAt: string;
 }
 
+export interface DevotionalProgress {
+  id: number;
+  planId: string;
+  completedDays: string;
+  startedAt: string;
+  lastActivityAt: string;
+}
+
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 function computeDailyStreak(logs: HabitLog[]): { currentStreak: number; bestStreak: number } {
@@ -197,6 +205,15 @@ class Database {
           lastPracticedAt TEXT,
           createdAt TEXT NOT NULL,
           UNIQUE(reference)
+        );
+
+        CREATE TABLE IF NOT EXISTS devotional_progress (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          planId TEXT NOT NULL,
+          completedDays TEXT NOT NULL DEFAULT '[]',
+          startedAt TEXT NOT NULL,
+          lastActivityAt TEXT NOT NULL,
+          UNIQUE(planId)
         );
       `);
 
@@ -425,6 +442,46 @@ class Database {
   async setMemoryVerseStatus(id: number, status: string): Promise<void> {
     const database = this.getDatabase();
     await database.runAsync('UPDATE memory_verses SET status = ? WHERE id = ?', [status, id]);
+  }
+
+  async getAllDevotionalProgress(): Promise<DevotionalProgress[]> {
+    const database = this.getDatabase();
+    const result = await database.getAllAsync('SELECT * FROM devotional_progress');
+    return result as DevotionalProgress[];
+  }
+
+  async getDevotionalProgress(planId: string): Promise<DevotionalProgress | null> {
+    const database = this.getDatabase();
+    const result = await database.getFirstAsync(
+      'SELECT * FROM devotional_progress WHERE planId = ?',
+      [planId]
+    );
+    return (result as DevotionalProgress) || null;
+  }
+
+  async markDevotionalDayComplete(planId: string, day: number): Promise<void> {
+    const database = this.getDatabase();
+    const now = new Date().toISOString();
+    const existing = await this.getDevotionalProgress(planId);
+
+    if (!existing) {
+      await database.runAsync(
+        'INSERT INTO devotional_progress (planId, completedDays, startedAt, lastActivityAt) VALUES (?, ?, ?, ?)',
+        [planId, JSON.stringify([day]), now, now]
+      );
+      return;
+    }
+
+    const completedDays: number[] = JSON.parse(existing.completedDays || '[]');
+    if (!completedDays.includes(day)) {
+      completedDays.push(day);
+      completedDays.sort((a, b) => a - b);
+    }
+
+    await database.runAsync(
+      'UPDATE devotional_progress SET completedDays = ?, lastActivityAt = ? WHERE planId = ?',
+      [JSON.stringify(completedDays), now, planId]
+    );
   }
 }
 

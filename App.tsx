@@ -6,6 +6,8 @@ import { PremiumProvider } from './src/context/PremiumContext';
 import { OnboardingNavigator } from './src/navigation/OnboardingNavigator';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { db } from './src/database/database';
+import { getReminderHours } from './src/utils/reminderSettings';
+import { scheduleHabitReminders } from './src/utils/pushNotifications';
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
@@ -23,6 +25,12 @@ export default function App() {
       // Check onboarding status
       const onboardingComplete = await AsyncStorage.getItem('hasCompletedOnboarding');
       setHasCompletedOnboarding(onboardingComplete === 'true');
+
+      // Re-arm habit reminder notifications for returning users
+      if (onboardingComplete === 'true') {
+        const hours = await getReminderHours();
+        scheduleHabitReminders(hours);
+      }
     } catch (error) {
       console.error('Error initializing app:', error);
     } finally {
@@ -34,6 +42,9 @@ export default function App() {
     try {
       await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
       setHasCompletedOnboarding(true);
+
+      const hours = await getReminderHours();
+      scheduleHabitReminders(hours);
     } catch (error) {
       console.error('Error saving onboarding status:', error);
     }

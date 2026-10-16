@@ -15,6 +15,7 @@ import { useTheme } from '../context/ThemeContext';
 import { usePremium } from '../context/PremiumContext';
 import { db, JournalEntry } from '../database/database';
 import { exportJournalToPDF, exportJournalToExcel } from '../utils/export';
+import { PremiumModal } from '../components/PremiumModal';
 
 type JournalTab = 'gratitude' | 'prayer';
 
@@ -55,7 +56,10 @@ export function JournalScreen() {
     }
 
     if (entryTags.trim() && !isPremium) {
-      setEntryTags('');
+      // Close the entry editor first - showing another native Modal while
+      // this one is still open leaves it unresponsive until the app is
+      // backgrounded/foregrounded.
+      setModalVisible(false);
       setPremiumFeature('Journal Tags');
       setPremiumModalVisible(true);
       return;
@@ -360,12 +364,14 @@ export function JournalScreen() {
           placeholderTextColor={currentTheme.textSecondary}
           value={searchText}
           onChangeText={setSearchText}
-          editable={isPremium}
         />
         <TouchableOpacity
-          style={[styles.searchButton, { backgroundColor: currentTheme.accent }]}
+          style={[
+            styles.searchButton,
+            { backgroundColor: currentTheme.accent },
+            !isPremium && { opacity: 0.6 },
+          ]}
           onPress={handleSearch}
-          disabled={!isPremium}
         >
           <Text style={styles.searchButtonText}>🔍</Text>
         </TouchableOpacity>
@@ -555,7 +561,6 @@ export function JournalScreen() {
                   placeholderTextColor={currentTheme.textSecondary}
                   value={entryTags}
                   onChangeText={setEntryTags}
-                  editable={isPremium}
                 />
                 {!isPremium && (
                   <View style={styles.premiumBadgeInput}>
@@ -608,24 +613,11 @@ export function JournalScreen() {
         </View>
       </Modal>
 
-      {premiumModalVisible && (
-        <View style={styles.premiumModalOverlay}>
-          <View style={[styles.premiumModalContent, { backgroundColor: currentTheme.cardBackground }]}>
-            <Text style={[styles.premiumModalTitle, { color: currentTheme.textPrimary }]}>
-              Premium Feature
-            </Text>
-            <Text style={[styles.premiumModalText, { color: currentTheme.textSecondary }]}>
-              {premiumFeature} is only available for premium members.
-            </Text>
-            <TouchableOpacity
-              style={[styles.premiumButton, { backgroundColor: currentTheme.accent }]}
-              onPress={() => setPremiumModalVisible(false)}
-            >
-              <Text style={styles.premiumButtonText}>Got it</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
+      <PremiumModal
+        visible={premiumModalVisible}
+        onClose={() => setPremiumModalVisible(false)}
+        feature={premiumFeature}
+      />
     </SafeAreaView>
   );
 }
@@ -949,40 +941,5 @@ const styles = StyleSheet.create({
     right: 8,
     top: 8,
     opacity: 0.5,
-  },
-  premiumModalOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  premiumModalContent: {
-    borderRadius: 12,
-    padding: 20,
-    width: '80%',
-  },
-  premiumModalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
-  premiumModalText: {
-    fontSize: 14,
-    marginBottom: 16,
-    lineHeight: 20,
-  },
-  premiumButton: {
-    paddingVertical: 12,
-    borderRadius: 6,
-    alignItems: 'center',
-  },
-  premiumButtonText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 14,
   },
 });

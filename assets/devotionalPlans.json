@@ -1,0 +1,173 @@
+[
+  {
+    "id": "gratitude-7",
+    "title": "7 Days on Gratitude",
+    "description": "Cultivate a heart of thankfulness, even in hard seasons, through a week of Scripture and reflection.",
+    "icon": "🙏",
+    "days": [
+      {
+        "day": 1,
+        "verseReference": "1 Thessalonians 5:18",
+        "verseText": "In every thing give thanks: for this is the will of God in Christ Jesus concerning you.",
+        "reflection": "What is one thing today you can thank God for, even in a hard season?",
+        "habitSuggestion": "Write down 3 things you're grateful for before bed."
+      },
+      {
+        "day": 2,
+        "verseReference": "Psalm 107:1",
+        "verseText": "O give thanks unto the LORD, for he is good: for his mercy endureth for ever.",
+        "reflection": "Where have you seen God's goodness this week, even in something small?",
+        "habitSuggestion": "Thank God out loud for one specific blessing before you eat today."
+      },
+      {
+        "day": 3,
+        "verseReference": "Philippians 4:6",
+        "verseText": "Be careful for nothing; but in every thing by prayer and supplication with thanksgiving let your requests be made known unto God.",
+        "reflection": "What worry are you carrying that you could bring to God with thanksgiving instead of anxiety?",
+        "habitSuggestion": "Turn one worry into a prayer of thanks today."
+      },
+      {
+        "day": 4,
+        "verseReference": "Colossians 3:15",
+        "verseText": "And let the peace of God rule in your hearts, to the which also ye are called in one body; and be ye thankful.",
+        "reflection": "Is there a relationship in your life you've taken for granted? How can you show thankfulness for it today?",
+        "habitSuggestion": "Send a message thanking someone who has shaped your faith or your life."
+      },
+      {
+        "day": 5,
+        "verseReference": "Psalm 100:4",
+        "verseText": "Enter into his gates with thanksgiving, and into his courts with praise: be thankful unto him, and bless his name.",
+        "reflection": "What would it look like to start your prayer time with praise instead of requests today?",
+        "habitSuggestion": "Begin your prayer today with two minutes of praise before asking for anything."
+      },
+      {
+        "day": 6,
+        "verseReference": "1 Chronicles 16:34",
+        "verseText": "O give thanks unto the LORD; for he is good; for his mercy endureth for ever.",
+        "reflection": "Where have you experienced God's mercy recently — a second chance, a quiet relief, an undeserved kindness?",
+        "habitSuggestion": "Journal about one time God showed you mercy this year."
+      },
+      {
+        "day": 7,
+        "verseReference": "James 1:17",
+        "verseText": "Every good gift and every perfect gift is from above, and cometh down from the Father of lights, with whom is no variableness, neither shadow of turning.",
+        "reflection": "Looking back on this week, what good gift from God stands out most clearly to you now?",
+        "habitSuggestion": "Make a list of 7 good gifts God has given you — one for each day of this plan."
+      }
+    ]
+  },
+  {
+    "id": "prayer-7",
+    "title": "7 Days on Prayer",
+    "description": "Deepen your conversation with God through a week of Scripture on what it means to pray.",
+    "icon": "🕊️",
+    "days": [
+      {
+        "day": 1,
+        "verseReference": "Matthew 6:6",
+        "verseText": "But thou, when thou prayest, enter into thy closet, and when thou hast shut thy door, pray to thy Father which is in secret; and thy Father which seeth in secret shall reward thee openly.",
+        "reflection": "Do you have a quiet, private place and time set aside for prayer? What would it take to create one?",
+        "habitSuggestion": "Find 5 quiet minutes today to pray somewhere private, without distractions."
+      },
+      {
+        "day": 2,
+        "verseReference": "1 John 5:14",
+        "verseText": "And this is the confidence that we have in him, that, if we ask any thing according to his will, he heareth us.",
+        "reflection": "What confidence do you have — or struggle to have — that God actually hears you when you pray?",
+        "habitSuggestion": "Pray one request today and intentionally thank God in advance for hearing you."
+      },
+      {
+        "day": 3,
+        "verseReference": "James 5:16",
+        "verseText": "Confess your faults one to another, and pray one for another, that ye may be healed. The effectual fervent prayer of a righteous man availeth much.",
+        "reflection": "Is there someone in your life you could pray for today, or pray together with?",
+        "habitSuggestion": "Text or call someone and pray for a need they're facing."
+      },
+      {
+        "day": 4,
+        "verseReference": "Matthew 7:7",
+        "verseText": "Ask, and it shall be given you; seek, and ye shall find; knock, and it shall be opened unto you.",
+        "reflection": "What have you been hesitant to ask God for? What's holding you back?",
+        "habitSuggestion": "Bring one bold request to God in prayer today."
+      },
+      {
+        "day": 5,
+        "verseReference": "1 Thessalonians 5:17",
+        "verseText": "Pray without ceasing.",
+        "reflection": "What would it look like to weave short prayers into the ordinary moments of today — commuting, cooking, waiting?",
+        "habitSuggestion": "Offer a short, silent prayer during three ordinary moments today."
+      },
+      {
+        "day": 6,
+        "verseReference": "Mark 11:24",
+        "verseText": "Therefore I say unto you, What things soever ye desire, when ye pray, believe that ye receive them, and ye shall have them.",
+        "reflection": "Where is your faith weak when you pray — do you expect God to actually move?",
+        "habitSuggestion": "Pray for one specific thing today with deliberate, expectant faith."
+      },
+      {
+        "day": 7,
+        "verseReference": "Jeremiah 33:3",
+        "verseText": "Call unto me, and I will answer thee, and shew thee great and mighty things, which thou knowest not.",
+        "reflection": "Looking back on this week of prayer, what has shifted in how you talk to God?",
+        "habitSuggestion": "Write down one answered prayer — big or small — from this past week."
+      }
+    ]
+  },
+  {
+    "id": "trust-7",
+    "title": "7 Days on Trusting God",
+    "description": "Learn to rest in God's faithfulness when life feels uncertain, through a week of Scripture and reflection.",
+    "icon": "🌿",
+    "days": [
+      {
+        "day": 1,
+        "verseReference": "Proverbs 3:5-6",
+        "verseText": "Trust in the LORD with all thine heart; and lean not unto thine own understanding. In all thy ways acknowledge him, and he shall direct thy paths.",
+        "reflection": "Where are you currently leaning on your own understanding instead of trusting God?",
+        "habitSuggestion": "Name one decision you're facing and hand it over to God in prayer today."
+      },
+      {
+        "day": 2,
+        "verseReference": "Isaiah 41:10",
+        "verseText": "Fear thou not; for I am with thee: be not dismayed; for I am thy God: I will strengthen thee; yea, I will help thee; yea, I will uphold thee with the right hand of my righteousness.",
+        "reflection": "What fear are you facing right now that you need God's strength for?",
+        "habitSuggestion": "Speak this verse out loud over your biggest fear today."
+      },
+      {
+        "day": 3,
+        "verseReference": "Psalm 56:3",
+        "verseText": "What time I am afraid, I will trust in thee.",
+        "reflection": "What's your instinct when fear rises — to control, to worry, or to trust?",
+        "habitSuggestion": "The next time you feel anxious today, pause and pray this verse."
+      },
+      {
+        "day": 4,
+        "verseReference": "Romans 8:28",
+        "verseText": "And we know that all things work together for good to them that love God, to them who are the called according to his purpose.",
+        "reflection": "Can you look back on a hard season and see how God worked good from it?",
+        "habitSuggestion": "Journal about a past hardship where you can now see God's hand."
+      },
+      {
+        "day": 5,
+        "verseReference": "Jeremiah 29:11",
+        "verseText": "For I know the thoughts that I think toward you, saith the LORD, thoughts of peace, and not of evil, to give you an expected end.",
+        "reflection": "Do you believe God's plans for you are good, even when circumstances say otherwise?",
+        "habitSuggestion": "Thank God for a good future you can't yet see."
+      },
+      {
+        "day": 6,
+        "verseReference": "Psalm 46:1",
+        "verseText": "God is our refuge and strength, a very present help in trouble.",
+        "reflection": "Where do you tend to run for comfort when trouble comes — and is it God?",
+        "habitSuggestion": "Bring today's trouble, big or small, straight to God before anyone else."
+      },
+      {
+        "day": 7,
+        "verseReference": "Isaiah 26:3",
+        "verseText": "Thou wilt keep him in perfect peace, whose mind is stayed on thee: because he trusteth in thee.",
+        "reflection": "Looking back on this week, how has your trust in God grown?",
+        "habitSuggestion": "Write a short prayer committing to keep your mind stayed on God this coming week."
+      }
+    ]
+  }
+]

@@ -10,6 +10,7 @@ import { getWeekStart, getWeekEnd, isHabitScheduledToday, canToggleWeeklyHabit }
 import { countDueVerses } from '../utils/verseReview';
 import { MemorizeVerseModal } from '../components/MemorizeVerseModal';
 import { DailyQuizModal } from '../components/DailyQuizModal';
+import { DevotionalPlansModal } from '../components/DevotionalPlansModal';
 
 interface MemorizeHabitStatus {
   id: number;
@@ -23,6 +24,7 @@ export function HomeScreen() {
   const [verseOfTheDay] = useState<VerseOfTheDay>(getVerseOfTheDay());
   const [memorizeModalVisible, setMemorizeModalVisible] = useState(false);
   const [quizModalVisible, setQuizModalVisible] = useState(false);
+  const [devotionalModalVisible, setDevotionalModalVisible] = useState(false);
   const [dueVerseCount, setDueVerseCount] = useState(0);
   const [memorizeHabit, setMemorizeHabit] = useState<MemorizeHabitStatus | null>(null);
 
@@ -163,6 +165,28 @@ export function HomeScreen() {
               </Text>
             </TouchableOpacity>
           </View>
+
+          {/* Devotional Plans */}
+          <View style={[styles.devotionalCard, { backgroundColor: currentTheme.cardBackground }]}>
+            <View style={styles.verseHeader}>
+              <Text style={styles.verseIcon}>📚</Text>
+              <Text style={[styles.verseTitle, { color: currentTheme.textPrimary }]}>
+                Devotional Plans
+              </Text>
+              {!isPremium && <Text style={styles.devotionalPremiumIcon}>👑</Text>}
+            </View>
+            <Text style={[styles.devotionalSubtitle, { color: currentTheme.textSecondary }]}>
+              Multi-day guided series pairing Scripture with reflection and habits.
+            </Text>
+            <TouchableOpacity
+              style={[styles.practiceMemorizingButton, { borderColor: currentTheme.accent }]}
+              onPress={() => setDevotionalModalVisible(true)}
+            >
+              <Text style={[styles.practiceMemorizingButtonText, { color: currentTheme.accent }]}>
+                Browse Plans
+              </Text>
+            </TouchableOpacity>
+          </View>
         </ScrollView>
       </SafeAreaView>
 
@@ -181,6 +205,11 @@ export function HomeScreen() {
         visible={quizModalVisible}
         onClose={() => setQuizModalVisible(false)}
         verseOfTheDay={verseOfTheDay}
+      />
+
+      <DevotionalPlansModal
+        visible={devotionalModalVisible}
+        onClose={() => setDevotionalModalVisible(false)}
       />
     </View>
   );
@@ -221,6 +250,20 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 20,
     marginBottom: 20,
+  },
+  devotionalCard: {
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+  },
+  devotionalSubtitle: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  devotionalPremiumIcon: {
+    fontSize: 16,
+    marginLeft: 6,
   },
   verseHeader: {
     flexDirection: 'row',
