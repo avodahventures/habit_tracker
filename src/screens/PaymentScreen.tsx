@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,22 +9,39 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Purchases, { PurchasesPackage } from 'react-native-purchases';
 import { useTheme } from '../context/ThemeContext';
-import { usePremium } from '../context/PremiumContext';
+import { usePremium, PREMIUM_PRICE_LABEL } from '../context/PremiumContext';
 import { useNavigation } from '@react-navigation/native';
 
 export function PaymentScreen() {
   const { currentTheme } = useTheme();
-  const { setPremium } = usePremium();
+  const { purchasePremium, restorePurchases } = usePremium();
   const navigation = useNavigation();
   const [processing, setProcessing] = useState(false);
+  const [pkg, setPkg] = useState<PurchasesPackage | null>(null);
+  const [offeringsError, setOfferingsError] = useState<string | null>(null);
 
-  // Monthly plan is the only option shown
+  useEffect(() => {
+    Purchases.getOfferings()
+      .then((offerings) => {
+        const found = offerings.current?.annual ?? offerings.current?.availablePackages[0] ?? null;
+        setPkg(found);
+        if (!found) {
+          setOfferingsError('No package found in the current RevenueCat offering.');
+        }
+      })
+      .catch((error) => {
+        console.error('Error loading offerings:', error);
+        setOfferingsError(error?.message ?? String(error));
+      });
+  }, []);
+
+  const priceLabel = pkg ? pkg.product.priceString : PREMIUM_PRICE_LABEL.split('/')[0];
   const plan = {
-    price: '$4.99',
-    period: 'month',
-    billingCycle: 'Billed monthly',
-    entitlementId: 'faith_premium',
+    price: priceLabel,
+    period: 'year',
+    billingCycle: 'Billed annually',
   };
 
   const features = [
@@ -62,46 +79,39 @@ export function PaymentScreen() {
 
   const handlePurchase = async () => {
     setProcessing(true);
-
-    // Simulate payment processing
-    setTimeout(() => {
+    try {
+      await purchasePremium();
       Alert.alert(
         'Success! 🎉',
-        `You now have access to ${plan.entitlementId}! Enjoy all the features.`,
+        'You now have Premium for the next year. Enjoy all the features!',
         [
           {
             text: 'Start Using Premium',
             onPress: () => {
-              setPremium(true);
               navigation.goBack();
             },
           },
         ]
       );
+    } catch (error: any) {
+      Alert.alert('Purchase Failed', error?.message ?? String(error));
+    } finally {
       setProcessing(false);
-    }, 2000);
-
-    // TODO: Integrate with actual payment provider
-    // When integrating, use plan.entitlementId = 'faith_premium'
-    // Examples: Stripe, RevenueCat, Apple/Google In-App Purchases
+    }
   };
 
-  const handleRestore = () => {
-    Alert.alert(
-      'Restore Purchases',
-      'This feature will restore your previous purchases.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Restore',
-          onPress: () => {
-            // TODO: Implement actual restore logic
-            // Check for 'faith_premium' entitlement
-            Alert.alert('Info', 'No previous purchases found.');
-          },
-        },
-      ]
-    );
+  const handleRestore = async () => {
+    try {
+      const restored = await restorePurchases();
+      Alert.alert(
+        restored ? 'Restored! 🎉' : 'No Purchases Found',
+        restored
+          ? 'Your Premium subscription has been restored.'
+          : 'We couldn\'t find a previous purchase for this Apple ID.'
+      );
+    } catch (error) {
+      Alert.alert('Error', 'Failed to restore purchases. Please try again.');
+    }
   };
 
   return (
@@ -123,6 +133,11 @@ export function PaymentScreen() {
           <Text style={[styles.subtitle, { color: currentTheme.textSecondary }]}>
             Unlock powerful features for your spiritual growth
           </Text>
+          {!!offeringsError && (
+            <Text style={[styles.subtitle, { color: '#F87171', marginTop: 8 }]}>
+              Debug: {offeringsError}
+            </Text>
+          )}
         </View>
 
         {/* Single Plan Display */}

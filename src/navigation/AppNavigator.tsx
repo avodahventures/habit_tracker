@@ -10,6 +10,7 @@ import { JournalScreen } from '../screens/JournalScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { PaymentScreen } from '../screens/PaymentScreen';
 import { useTheme } from '../context/ThemeContext';
+import { ExpirationPromptModal } from '../components/ExpirationPromptModal';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -18,6 +19,7 @@ function MainTabs() {
   const { currentTheme } = useTheme();
 
   return (
+    <>
     <Tab.Navigator
       initialRouteName="Home"
       screenOptions={{
@@ -66,6 +68,8 @@ function MainTabs() {
         }}
       />
     </Tab.Navigator>
+    <ExpirationPromptModal />
+    </>
   );
 }
 

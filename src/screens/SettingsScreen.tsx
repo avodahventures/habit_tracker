@@ -2,9 +2,10 @@ import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Modal, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
-import { usePremium } from '../context/PremiumContext';
+import { usePremium, PREMIUM_PRICE_LABEL } from '../context/PremiumContext';
+import { useUserProfile } from '../context/UserProfileContext';
 import { themes, ThemeType } from '../utils/themes';
 import { db, Habit } from '../database/database';
 import { DEFAULT_HABITS, DefaultHabit } from '../utils/defaultHabits';
@@ -13,9 +14,27 @@ import { scheduleHabitReminders } from '../utils/pushNotifications';
 
 const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
+// Dev-only switch for the "Premium Status" and "Reset Onboarding" testing
+// sections below. Flip to true when you need them for debugging, false to
+// hide them again before shipping/demoing.
+const SHOW_DEBUG_SETTINGS = true;
+
 export function SettingsScreen() {
   const { currentTheme, themeType, setTheme } = useTheme();
-  const { isPremium, setPremium } = usePremium();
+  const {
+    isPremium,
+    setPremium,
+    isTrialActive,
+    trialDaysRemaining,
+    hasActiveSubscription,
+    subscriptionExpiresAt,
+    simulateTrialExpired,
+    resetTrialAndSubscription,
+  } = usePremium();
+  const navigation = useNavigation<any>();
+  const { name, setName: saveName } = useUserProfile();
+  const [nameExpanded, setNameExpanded] = useState(false);
+  const [nameInput, setNameInput] = useState('');
   const [habits, setHabits] = useState<Habit[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [frequencyModalVisible, setFrequencyModalVisible] = useState(false);
@@ -31,6 +50,7 @@ export function SettingsScreen() {
   const [remindersExpanded, setRemindersExpanded] = useState(false);
   const [habitsExpanded, setHabitsExpanded] = useState(true);
   const [premiumExpanded, setPremiumExpanded] = useState(false);
+  const [debugPremiumExpanded, setDebugPremiumExpanded] = useState(false);
   const [reminderHours, setReminderHoursState] = useState<number[]>([]);
 
   useFocusEffect(
@@ -239,7 +259,56 @@ export function SettingsScreen() {
       <ScrollView style={styles.content}>
         <Text style={[styles.title, { color: currentTheme.textPrimary }]}>Settings</Text>
 
-        {/* Premium Status Section - For Testing */}
+        {/* Your Name Section - Collapsible */}
+        <View style={styles.section}>
+          <TouchableOpacity
+            style={[styles.sectionHeaderButton, { backgroundColor: currentTheme.cardBackground }]}
+            onPress={() => {
+              if (!nameExpanded) setNameInput(name);
+              setNameExpanded(!nameExpanded);
+            }}
+            activeOpacity={0.7}
+          >
+            <View style={styles.sectionHeaderLeft}>
+              <Text style={[styles.sectionTitle, { color: currentTheme.textPrimary }]}>
+                👤 Your Name
+              </Text>
+              <View style={[styles.badge, { backgroundColor: currentTheme.accent }]}>
+                <Text style={styles.badgeText}>{name || 'Not set'}</Text>
+              </View>
+            </View>
+            <Text style={[styles.expandIcon, { color: currentTheme.textPrimary }]}>
+              {nameExpanded ? '▼' : '▶'}
+            </Text>
+          </TouchableOpacity>
+
+          {nameExpanded && (
+            <View style={styles.sectionContent}>
+              <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>
+                Used for a personal greeting on the Home screen.
+              </Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  { backgroundColor: currentTheme.cardBackground, color: currentTheme.textPrimary },
+                ]}
+                placeholder="Your name"
+                placeholderTextColor={currentTheme.textSecondary}
+                value={nameInput}
+                onChangeText={setNameInput}
+                autoCapitalize="words"
+              />
+              <TouchableOpacity
+                style={[styles.nameSaveButton, { backgroundColor: currentTheme.accent }]}
+                onPress={() => saveName(nameInput.trim())}
+              >
+                <Text style={styles.saveButtonText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+
+        {/* Premium Section - always visible, shows real trial/subscription status */}
         <View style={styles.section}>
           <TouchableOpacity
             style={[styles.sectionHeaderButton, { backgroundColor: currentTheme.cardBackground }]}
@@ -248,10 +317,17 @@ export function SettingsScreen() {
           >
             <View style={styles.sectionHeaderLeft}>
               <Text style={[styles.sectionTitle, { color: currentTheme.textPrimary }]}>
-                👑 Premium Status
+                ✨ Premium
               </Text>
-              <View style={[styles.badge, { backgroundColor: isPremium ? '#22C55E' : '#F59E0B' }]}>
-                <Text style={styles.badgeText}>{isPremium ? 'Active' : 'Free'}</Text>
+              <View
+                style={[
+                  styles.badge,
+                  { backgroundColor: isPremium ? '#22C55E' : '#F59E0B' },
+                ]}
+              >
+                <Text style={styles.badgeText}>
+                  {hasActiveSubscription ? 'Active' : isTrialActive ? 'Trial' : 'Free'}
+                </Text>
               </View>
             </View>
             <Text style={[styles.expandIcon, { color: currentTheme.textPrimary }]}>
@@ -261,68 +337,170 @@ export function SettingsScreen() {
 
           {premiumExpanded && (
             <View style={styles.sectionContent}>
-              <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>
-                Premium features include tagging, filtering, and exporting journal entries
-              </Text>
-
-              <TouchableOpacity
-                style={[
-                  styles.premiumToggle,
-                  { 
-                    backgroundColor: isPremium ? '#22C55E' : currentTheme.cardBackground,
-                    borderColor: isPremium ? '#22C55E' : currentTheme.accent,
-                    borderWidth: 2
-                  }
-                ]}
-                onPress={() => setPremium(!isPremium)}
-              >
-                <Text style={[
-                  styles.premiumToggleText,
-                  { color: isPremium ? '#FFFFFF' : currentTheme.textPrimary }
-                ]}>
-                  {isPremium ? '✓ Premium Active' : 'Toggle Premium (Test Mode)'}
+              {hasActiveSubscription ? (
+                <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>
+                  Your Premium subscription is active until{' '}
+                  {subscriptionExpiresAt ? new Date(subscriptionExpiresAt).toLocaleDateString() : ''}.
                 </Text>
-              </TouchableOpacity>
+              ) : isTrialActive ? (
+                <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>
+                  You're on your 30-day free trial — {trialDaysRemaining}{' '}
+                  {trialDaysRemaining === 1 ? 'day' : 'days'} left. After that, you'll be asked to
+                  continue Premium for {PREMIUM_PRICE_LABEL} or switch to the free plan.
+                </Text>
+              ) : (
+                <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>
+                  You're on the free plan. Upgrade to Premium for {PREMIUM_PRICE_LABEL} to unlock
+                  journaling, devotional plans, and verse memorization tools.
+                </Text>
+              )}
 
-              {isPremium && (
-                <View style={[styles.premiumFeatures, { backgroundColor: currentTheme.colors[1] }]}>
-                  <Text style={[styles.premiumFeaturesTitle, { color: currentTheme.textPrimary }]}>
-                    Premium Features Unlocked:
+              {!hasActiveSubscription && (
+                <TouchableOpacity
+                  style={[styles.premiumToggle, { backgroundColor: currentTheme.accent }]}
+                  onPress={() => navigation.navigate('Payment')}
+                >
+                  <Text style={[styles.premiumToggleText, { color: '#FFFFFF' }]}>
+                    Upgrade to Premium — {PREMIUM_PRICE_LABEL}
                   </Text>
-                  <Text style={[styles.premiumFeature, { color: currentTheme.textSecondary }]}>
-                    ✓ Tag journal entries
-                  </Text>
-                  <Text style={[styles.premiumFeature, { color: currentTheme.textSecondary }]}>
-                    ✓ Filter by tags
-                  </Text>
-                  <Text style={[styles.premiumFeature, { color: currentTheme.textSecondary }]}>
-                    ✓ Export to PDF/Spreadsheet
-                  </Text>
-                  <Text style={[styles.premiumFeature, { color: currentTheme.textSecondary }]}>
-                    ✓ 30 Days & 12 Months Dashboard
-                  </Text>
-                </View>
+                </TouchableOpacity>
               )}
             </View>
           )}
         </View>
 
-        {/* Reset Onboarding - For Testing */}
-        <View style={styles.section}>
-          <TouchableOpacity
-            style={[styles.sectionHeaderButton, { backgroundColor: currentTheme.cardBackground }]}
-            onPress={handleResetOnboarding}
-          >
-            <View style={styles.sectionHeaderLeft}>
-              <Text style={[styles.sectionTitle, { color: currentTheme.textPrimary }]}>
-                🔄 Reset Onboarding
-              </Text>
-              <View style={[styles.badge, { backgroundColor: '#F59E0B' }]}>
-                <Text style={styles.badgeText}>Testing</Text>
+        {/* Premium Test Override - For Testing - dev-only */}
+        {SHOW_DEBUG_SETTINGS && (
+          <View style={styles.section}>
+            <TouchableOpacity
+              style={[styles.sectionHeaderButton, { backgroundColor: currentTheme.cardBackground }]}
+              onPress={() => setDebugPremiumExpanded(!debugPremiumExpanded)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.sectionHeaderLeft}>
+                <Text style={[styles.sectionTitle, { color: currentTheme.textPrimary }]}>
+                  👑 Premium Test Override
+                </Text>
+                <View style={[styles.badge, { backgroundColor: isPremium ? '#22C55E' : '#F59E0B' }]}>
+                  <Text style={styles.badgeText}>{isPremium ? 'Active' : 'Free'}</Text>
+                </View>
               </View>
-            </View>
-          </TouchableOpacity>
-        </View>
+              <Text style={[styles.expandIcon, { color: currentTheme.textPrimary }]}>
+                {debugPremiumExpanded ? '▼' : '▶'}
+              </Text>
+            </TouchableOpacity>
+
+            {debugPremiumExpanded && (
+              <View style={styles.sectionContent}>
+                <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>
+                  Force-overrides the real 30-day trial / $5-per-year subscription logic above, for
+                  testing. Reset to go back to real trial/subscription behavior.
+                </Text>
+
+                <TouchableOpacity
+                  style={[
+                    styles.premiumToggle,
+                    {
+                      backgroundColor: isPremium ? '#22C55E' : currentTheme.cardBackground,
+                      borderColor: isPremium ? '#22C55E' : currentTheme.accent,
+                      borderWidth: 2
+                    }
+                  ]}
+                  onPress={() => setPremium(!isPremium)}
+                >
+                  <Text style={[
+                    styles.premiumToggleText,
+                    { color: isPremium ? '#FFFFFF' : currentTheme.textPrimary }
+                  ]}>
+                    {isPremium ? '✓ Premium Active (Override)' : 'Toggle Premium (Test Mode)'}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.freeButton}
+                  onPress={() => setPremium(null)}
+                >
+                  <Text style={[styles.freeButtonText, { color: currentTheme.textSecondary }]}>
+                    Reset to real trial/subscription logic
+                  </Text>
+                </TouchableOpacity>
+
+                <Text style={[styles.subsectionTitle, { color: currentTheme.textPrimary, marginTop: 16 }]}>
+                  Simulate the 30-day trial
+                </Text>
+                <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>
+                  This jumps the stored trial start date into the past so you can see the real
+                  expiration prompt fire, without waiting 30 real days. Testing the {PREMIUM_PRICE_LABEL}
+                  purchase and renewal themselves requires a Sandbox Apple ID on a real device
+                  (StoreKit doesn't run in the simulator) — ask me for those steps when you're ready.
+                </Text>
+
+                <TouchableOpacity
+                  style={[styles.simulateButton, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.accent }]}
+                  onPress={() => {
+                    simulateTrialExpired();
+                    Alert.alert('Trial Expired', 'Trial start date moved back 31 days. Navigate to the Home tab to see the expiration prompt.');
+                  }}
+                >
+                  <Text style={[styles.simulateButtonText, { color: currentTheme.textPrimary }]}>
+                    ⏩ Simulate trial expired (Day 31)
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.simulateButton, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.cardBorder }]}
+                  onPress={() => {
+                    resetTrialAndSubscription();
+                    Alert.alert('Reset', 'Trial restarted from today (Day 1).');
+                  }}
+                >
+                  <Text style={[styles.simulateButtonText, { color: currentTheme.textPrimary }]}>
+                    🔄 Reset trial to Day 1
+                  </Text>
+                </TouchableOpacity>
+
+                {isPremium && (
+                  <View style={[styles.premiumFeatures, { backgroundColor: currentTheme.colors[1] }]}>
+                    <Text style={[styles.premiumFeaturesTitle, { color: currentTheme.textPrimary }]}>
+                      Premium Features Unlocked:
+                    </Text>
+                    <Text style={[styles.premiumFeature, { color: currentTheme.textSecondary }]}>
+                      ✓ Tag journal entries
+                    </Text>
+                    <Text style={[styles.premiumFeature, { color: currentTheme.textSecondary }]}>
+                      ✓ Filter by tags
+                    </Text>
+                    <Text style={[styles.premiumFeature, { color: currentTheme.textSecondary }]}>
+                      ✓ Export to PDF/Spreadsheet
+                    </Text>
+                    <Text style={[styles.premiumFeature, { color: currentTheme.textSecondary }]}>
+                      ✓ 30 Days & 12 Months Dashboard
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Reset Onboarding - For Testing - dev-only */}
+        {SHOW_DEBUG_SETTINGS && (
+          <View style={styles.section}>
+            <TouchableOpacity
+              style={[styles.sectionHeaderButton, { backgroundColor: currentTheme.cardBackground }]}
+              onPress={handleResetOnboarding}
+            >
+              <View style={styles.sectionHeaderLeft}>
+                <Text style={[styles.sectionTitle, { color: currentTheme.textPrimary }]}>
+                  🔄 Reset Onboarding
+                </Text>
+                <View style={[styles.badge, { backgroundColor: '#F59E0B' }]}>
+                  <Text style={styles.badgeText}>Testing</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Theme Section - Collapsible */}
         <View style={styles.section}>
@@ -845,6 +1023,25 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     paddingLeft: 8,
   },
+  freeButton: {
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  freeButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  simulateButton: {
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  simulateButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
   themeOption: {
     borderRadius: 12,
     padding: 16,
@@ -1055,6 +1252,11 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  nameSaveButton: {
     padding: 12,
     borderRadius: 8,
     alignItems: 'center',

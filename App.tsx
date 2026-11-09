@@ -3,6 +3,7 @@ import { ActivityIndicator, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ThemeProvider } from './src/context/ThemeContext';
 import { PremiumProvider } from './src/context/PremiumContext';
+import { UserProfileProvider } from './src/context/UserProfileContext';
 import { OnboardingNavigator } from './src/navigation/OnboardingNavigator';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { db } from './src/database/database';
@@ -61,11 +62,13 @@ export default function App() {
   return (
     <ThemeProvider>
       <PremiumProvider>
-        {hasCompletedOnboarding ? (
-          <AppNavigator />
-        ) : (
-          <OnboardingNavigator onComplete={handleOnboardingComplete} />
-        )}
+        <UserProfileProvider>
+          {hasCompletedOnboarding ? (
+            <AppNavigator />
+          ) : (
+            <OnboardingNavigator onComplete={handleOnboardingComplete} />
+          )}
+        </UserProfileProvider>
       </PremiumProvider>
     </ThemeProvider>
   );

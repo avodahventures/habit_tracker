@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
 import { usePremium } from '../context/PremiumContext';
+import { useUserProfile } from '../context/UserProfileContext';
 import { db } from '../database/database';
 import { getVerseOfTheDay, VerseOfTheDay } from '../utils/verses';
 import { getWeekStart, getWeekEnd, isHabitScheduledToday, canToggleWeeklyHabit } from '../utils/habitScheduling';
@@ -21,6 +22,7 @@ interface MemorizeHabitStatus {
 export function HomeScreen() {
   const { currentTheme } = useTheme();
   const { isPremium } = usePremium();
+  const { name } = useUserProfile();
   const [verseOfTheDay] = useState<VerseOfTheDay>(getVerseOfTheDay());
   const [memorizeModalVisible, setMemorizeModalVisible] = useState(false);
   const [quizModalVisible, setQuizModalVisible] = useState(false);
@@ -124,6 +126,11 @@ export function HomeScreen() {
             <Text style={[styles.brandCredit, { color: currentTheme.textSecondary }]}>
               by Avodah Ventures
             </Text>
+            {!!name && (
+              <Text style={[styles.greeting, { color: currentTheme.accent }]}>
+                Welcome back, {name}! 👋
+              </Text>
+            )}
           </View>
 
           {/* Verse of the Day */}
@@ -245,6 +252,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     marginTop: 4,
+  },
+  greeting: {
+    fontSize: 15,
+    fontWeight: '700',
+    marginTop: 14,
   },
   verseCard: {
     borderRadius: 16,

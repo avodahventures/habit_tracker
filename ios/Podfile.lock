@@ -75,6 +75,8 @@ PODS:
   - hermes-engine (0.81.5):
     - hermes-engine/Pre-built (= 0.81.5)
   - hermes-engine/Pre-built (0.81.5)
+  - PurchasesHybridCommon (19.12.0):
+    - RevenueCat (= 5.95.0)
   - RCTDeprecation (0.81.5)
   - RCTRequired (0.81.5)
   - RCTTypeSafety (0.81.5):
@@ -1795,6 +1797,7 @@ PODS:
     - React-utils (= 0.81.5)
     - ReactNativeDependencies
   - ReactNativeDependencies (0.81.5)
+  - RevenueCat (5.95.0)
   - RNCAsyncStorage (2.2.0):
     - hermes-engine
     - RCTRequired
@@ -1818,6 +1821,9 @@ PODS:
     - ReactNativeDependencies
     - Yoga
   - RNFS (2.20.0):
+    - React-Core
+  - RNPurchases (10.14.0):
+    - PurchasesHybridCommon (= 19.12.0)
     - React-Core
   - RNScreens (4.16.0):
     - hermes-engine
@@ -1999,9 +2005,15 @@ DEPENDENCIES:
   - ReactNativeDependencies (from `../node_modules/react-native/third-party-podspecs/ReactNativeDependencies.podspec`)
   - "RNCAsyncStorage (from `../node_modules/@react-native-async-storage/async-storage`)"
   - RNFS (from `../node_modules/react-native-fs`)
+  - RNPurchases (from `../node_modules/react-native-purchases`)
   - RNScreens (from `../node_modules/react-native-screens`)
   - RNSVG (from `../node_modules/react-native-svg`)
   - Yoga (from `../node_modules/react-native/ReactCommon/yoga`)
+
+SPEC REPOS:
+  trunk:
+    - PurchasesHybridCommon
+    - RevenueCat
 
 EXTERNAL SOURCES:
   EXApplication:
@@ -2173,6 +2185,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/@react-native-async-storage/async-storage"
   RNFS:
     :path: "../node_modules/react-native-fs"
+  RNPurchases:
+    :path: "../node_modules/react-native-purchases"
   RNScreens:
     :path: "../node_modules/react-native-screens"
   RNSVG:
@@ -2197,6 +2211,7 @@ SPEC CHECKSUMS:
   ExpoStoreReview: 32bb43b6fae9c8db3e33cad69996dff3785eef5f
   FBLazyVector: e95a291ad2dadb88e42b06e0c5fb8262de53ec12
   hermes-engine: 9f4dfe93326146a1c99eb535b1cb0b857a3cd172
+  PurchasesHybridCommon: 7ba4a84cdd9738a936b2091f7e982952c1feb6f6
   RCTDeprecation: 943572d4be82d480a48f4884f670135ae30bf990
   RCTRequired: 8f3cfc90cc25cf6e420ddb3e7caaaabc57df6043
   RCTTypeSafety: 16a4144ca3f959583ab019b57d5633df10b5e97c
@@ -2263,8 +2278,10 @@ SPEC CHECKSUMS:
   ReactCodegen: 7d4593f7591f002d137fe40cef3f6c11f13c88cc
   ReactCommon: 08810150b1206cc44aecf5f6ae19af32f29151a8
   ReactNativeDependencies: 71ce9c28beb282aa720ea7b46980fff9669f428a
+  RevenueCat: 431637b02e9e5dc1165c2031936947d0468e1ed4
   RNCAsyncStorage: 3a4f5e2777dae1688b781a487923a08569e27fe4
   RNFS: 89de7d7f4c0f6bafa05343c578f61118c8282ed8
+  RNPurchases: 75c8f3a10d5dd0f9601afacf72f9965853bb4fbd
   RNScreens: d8d6f1792f6e7ac12b0190d33d8d390efc0c1845
   RNSVG: cf9ae78f2edf2988242c71a6392d15ff7dd62522
   Yoga: 5934998fbeaef7845dbf698f698518695ab4cd1a
